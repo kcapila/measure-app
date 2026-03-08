@@ -3,711 +3,528 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>DimScan — Measure Anything</title>
+<title>DimScan 3D</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg: #0a0a0f;
-    --surface: rgba(255,255,255,0.04);
-    --border: rgba(255,255,255,0.08);
-    --accent: #00f5c4;
-    --accent2: #ff4f7b;
-    --text: #e8e8f0;
-    --muted: rgba(232,232,240,0.4);
-    --mono: 'DM Mono', monospace;
-    --display: 'Syne', sans-serif;
-  }
-
-  html, body {
-    width: 100%; height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--mono);
-    overflow: hidden;
-    touch-action: none;
-  }
-
-  #app {
-    width: 100vw; height: 100vh;
-    display: flex; flex-direction: column;
-    position: relative;
-  }
-
-  /* ── HEADER ── */
-  header {
-    position: absolute; top: 0; left: 0; right: 0; z-index: 20;
-    padding: 16px 20px 12px;
-    display: flex; align-items: center; justify-content: space-between;
-    background: linear-gradient(to bottom, rgba(10,10,15,0.95) 0%, transparent 100%);
-  }
-  .logo {
-    font-family: var(--display);
-    font-size: 22px; font-weight: 800;
-    letter-spacing: -0.5px;
-    color: var(--text);
-  }
-  .logo span { color: var(--accent); }
-  .unit-toggle {
-    display: flex; gap: 2px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 3px;
-  }
-  .unit-btn {
-    background: none; border: none; cursor: pointer;
-    font-family: var(--mono); font-size: 11px; font-weight: 500;
-    color: var(--muted);
-    padding: 5px 10px; border-radius: 6px;
-    transition: all 0.2s;
-  }
-  .unit-btn.active {
-    background: var(--accent);
-    color: #000;
-  }
-
-  /* ── CAMERA ── */
-  #camera-container {
-    position: absolute; inset: 0;
-    overflow: hidden;
-  }
-  #video {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-  #canvas {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    cursor: crosshair;
-  }
-
-  /* ── BOTTOM PANEL ── */
-  #panel {
-    position: absolute; bottom: 0; left: 0; right: 0; z-index: 20;
-    padding: 16px 20px 32px;
-    background: linear-gradient(to top, rgba(10,10,15,0.98) 60%, transparent 100%);
-  }
-
-  #measurement-display {
-    text-align: center;
-    margin-bottom: 16px;
-  }
-  .measure-value {
-    font-family: var(--display);
-    font-size: 52px; font-weight: 800;
-    line-height: 1;
-    color: var(--accent);
-    letter-spacing: -2px;
-    text-shadow: 0 0 40px rgba(0,245,196,0.4);
-    transition: all 0.2s;
-  }
-  .measure-value.has-value { animation: pulse-glow 0.3s ease; }
-  @keyframes pulse-glow {
-    0% { text-shadow: 0 0 40px rgba(0,245,196,0.4); }
-    50% { text-shadow: 0 0 80px rgba(0,245,196,0.9); }
-    100% { text-shadow: 0 0 40px rgba(0,245,196,0.4); }
-  }
-  .measure-label {
-    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-
-  #calibration-row {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 14px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-  }
-  .cal-label {
-    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
-    color: var(--muted);
-    flex-shrink: 0;
-  }
-  #ref-input {
-    background: none; border: none; outline: none;
-    font-family: var(--mono); font-size: 16px; font-weight: 500;
-    color: var(--text);
-    width: 70px; text-align: right;
-  }
-  #ref-input::-webkit-inner-spin-button { display: none; }
-  .ref-unit {
-    font-size: 12px; color: var(--muted);
-    flex-shrink: 0;
-  }
-  .cal-divider {
-    width: 1px; height: 20px;
-    background: var(--border);
-    margin: 0 4px;
-  }
-  .cal-hint {
-    font-size: 10px; color: var(--muted); flex: 1;
-    line-height: 1.4;
-  }
-
-  #controls {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-  }
-  .btn {
-    border: none; cursor: pointer; font-family: var(--mono);
-    border-radius: 10px; padding: 13px 16px;
-    font-size: 12px; font-weight: 500; letter-spacing: 0.5px;
-    transition: all 0.15s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  .btn:active { transform: scale(0.97); }
-  .btn-primary {
-    background: var(--accent); color: #000;
-    grid-column: span 2;
-    font-size: 13px;
-    box-shadow: 0 0 30px rgba(0,245,196,0.2);
-  }
-  .btn-primary:hover { box-shadow: 0 0 40px rgba(0,245,196,0.4); }
-  .btn-secondary {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  .btn-danger {
-    background: rgba(255,79,123,0.12);
-    border: 1px solid rgba(255,79,123,0.25);
-    color: var(--accent2);
-  }
-
-  /* ── STATUS CHIP ── */
-  #status {
-    position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
-    z-index: 20;
-    background: rgba(10,10,15,0.85);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 7px 16px;
-    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--muted);
-    backdrop-filter: blur(8px);
-    white-space: nowrap;
-    transition: all 0.3s;
-  }
-  #status.step-1 { border-color: rgba(0,245,196,0.4); color: var(--accent); }
-  #status.step-2 { border-color: rgba(255,200,0,0.4); color: #ffc800; }
-  #status.done { border-color: rgba(0,245,196,0.4); color: var(--accent); }
-
-  /* ── NO CAMERA ── */
-  #no-camera {
-    position: absolute; inset: 0; z-index: 30;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: var(--bg);
-    gap: 16px; padding: 40px;
-    text-align: center;
-  }
-  #no-camera h2 { font-family: var(--display); font-size: 24px; color: var(--text); }
-  #no-camera p { font-size: 12px; color: var(--muted); line-height: 1.7; max-width: 280px; }
-  #start-btn {
-    margin-top: 8px;
-    background: var(--accent); color: #000;
-    border: none; cursor: pointer;
-    font-family: var(--mono); font-size: 13px; font-weight: 500;
-    border-radius: 10px; padding: 14px 32px;
-    box-shadow: 0 0 40px rgba(0,245,196,0.3);
-    transition: all 0.2s;
-  }
-  #start-btn:hover { box-shadow: 0 0 60px rgba(0,245,196,0.5); transform: translateY(-1px); }
-  .camera-icon { font-size: 48px; }
-
-  /* ── HISTORY ── */
-  #history-list {
-    position: absolute; top: 70px; right: 12px; z-index: 20;
-    display: flex; flex-direction: column; gap: 6px;
-    max-height: 60vh; overflow-y: auto;
-  }
-  .history-item {
-    background: rgba(10,10,15,0.85);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 13px; font-weight: 500;
-    color: var(--accent);
-    backdrop-filter: blur(8px);
-    animation: slide-in 0.2s ease;
-    cursor: pointer;
-  }
-  @keyframes slide-in {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  .history-item .hi-label {
-    font-size: 9px; color: var(--muted); letter-spacing: 1px;
-    text-transform: uppercase; display: block;
-  }
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Bebas+Neue&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060810;--glass:rgba(255,255,255,0.05);--glass2:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.1);--accent:#0ff;--accent2:#ff6b35;--green:#39ff14;
+  --text:#dde4f0;--muted:rgba(221,228,240,0.45);--mono:'DM Mono',monospace;--display:'Bebas Neue',sans-serif;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent}
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+#canvas3d{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+#canvas2d{position:fixed;inset:0;width:100%;height:100%;z-index:2}
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+#header{pointer-events:all;padding:14px 18px 0;display:flex;align-items:flex-start;justify-content:space-between}
+.wordmark{font-family:var(--display);font-size:28px;letter-spacing:2px;color:var(--text);line-height:1}
+.wordmark em{color:var(--accent);font-style:normal}
+#mode-chips{display:flex;gap:6px;margin-top:6px}
+.chip{font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:5px 10px;border-radius:100px;border:1px solid var(--border);background:var(--glass);color:var(--muted);cursor:pointer;transition:all .2s;pointer-events:all}
+.chip.active{background:rgba(0,255,255,0.15);border-color:var(--accent);color:var(--accent)}
+#status-bar{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:8px}
+#status-pill{background:rgba(6,8,16,0.8);border:1px solid var(--border);border-radius:100px;padding:8px 18px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);backdrop-filter:blur(12px);transition:all .3s;white-space:nowrap}
+#status-pill.active{border-color:rgba(0,255,255,0.5);color:var(--accent)}
+#status-pill.warn{border-color:rgba(255,107,53,0.5);color:var(--accent2)}
+#status-pill.good{border-color:rgba(57,255,20,0.5);color:var(--green)}
+#crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;pointer-events:none}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:var(--accent);opacity:.7}
+#crosshair::before{width:1px;height:100%;left:50%;transform:translateX(-50%)}
+#crosshair::after{width:100%;height:1px;top:50%;transform:translateY(-50%)}
+.ch-ring{position:absolute;inset:4px;border-radius:50%;border:1px solid rgba(0,255,255,0.5);animation:ch-pulse 2s ease-in-out infinite}
+@keyframes ch-pulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:.9;transform:scale(1.1)}}
+#depth-badge{position:absolute;top:80px;right:18px;pointer-events:none;background:rgba(6,8,16,0.75);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);backdrop-filter:blur(8px);line-height:1.8}
+#depth-badge .dbval{font-size:14px;color:var(--text);font-weight:500;display:block}
+#depth-badge.xr{border-color:rgba(57,255,20,0.4);color:var(--green)}
+#depth-badge.ai{border-color:rgba(0,255,255,0.3);color:var(--accent)}
+#panel{pointer-events:all;padding:0 16px 28px;background:linear-gradient(to top,rgba(6,8,16,.97) 65%,transparent)}
+#meas-display{display:flex;align-items:flex-end;justify-content:center;gap:6px;padding:12px 0 6px}
+#meas-primary{font-family:var(--display);font-size:64px;line-height:1;color:var(--accent);letter-spacing:2px;text-shadow:0 0 40px rgba(0,255,255,.4);transition:all .2s}
+#meas-primary.pop{animation:pop .25s ease}
+@keyframes pop{0%{text-shadow:0 0 40px rgba(0,255,255,.4)}50%{text-shadow:0 0 100px rgba(0,255,255,.9)}100%{text-shadow:0 0 40px rgba(0,255,255,.4)}}
+#meas-unit{font-size:14px;color:var(--muted);margin-bottom:12px;letter-spacing:1px}
+#meas-secondary{font-size:11px;color:var(--muted);padding-bottom:10px;letter-spacing:.5px;text-align:center}
+#unit-row{display:flex;justify-content:center;gap:4px;margin-bottom:12px}
+.ubtn{background:var(--glass);border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:500;padding:6px 14px;border-radius:6px;cursor:pointer;transition:all .2s}
+.ubtn.active{background:rgba(0,255,255,.15);border-color:var(--accent);color:var(--accent)}
+#autocal-strip{display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:10px;background:var(--glass);border:1px solid var(--border);border-radius:10px}
+.ac-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);flex-shrink:0}
+.ac-btns{display:flex;gap:6px;flex:1}
+.ac-btn{flex:1;padding:6px 4px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s;text-align:center}
+.ac-btn.scanning{border-color:var(--accent2);color:var(--accent2);background:rgba(255,107,53,.1)}
+.ac-btn.done{border-color:var(--green);color:var(--green);background:rgba(57,255,20,.08)}
+#cal-status{font-size:10px;color:var(--muted);flex-shrink:0}
+#btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.abtn{border:none;cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.5px;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s}
+.abtn:active{transform:scale(.97)}
+.abtn-prime{background:var(--accent);color:#000;grid-column:span 2;font-size:13px;box-shadow:0 0 30px rgba(0,255,255,.2)}
+.abtn-prime:hover{box-shadow:0 0 50px rgba(0,255,255,.4)}
+.abtn-sec{background:var(--glass2);border:1px solid var(--border);color:var(--text)}
+.abtn-warn{background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.25);color:var(--accent2)}
+#history{position:absolute;top:80px;left:18px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.hitem{background:rgba(6,8,16,.8);border:1px solid var(--border);border-radius:7px;padding:6px 11px;backdrop-filter:blur(8px);animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.hitem-val{font-size:13px;color:var(--accent);font-weight:500}
+.hitem-lbl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+#scanlines{position:fixed;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,rgba(0,0,0,.08) 3px,rgba(0,0,0,.08) 4px);opacity:.4}
+#loading{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .6s}
+#loading.hidden{opacity:0;pointer-events:none}
+.load-title{font-family:var(--display);font-size:48px;letter-spacing:4px;color:var(--accent)}
+.load-sub{font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.load-bar{width:200px;height:2px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+.load-fill{height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .4s ease;box-shadow:0 0 12px var(--accent)}
+#load-status{font-size:10px;color:var(--muted);letter-spacing:1px;min-height:16px}
+.start-btn{background:var(--accent);color:#000;border:none;cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:500;border-radius:10px;padding:14px 36px;margin-top:8px;box-shadow:0 0 40px rgba(0,255,255,.3);transition:all .2s;letter-spacing:.5px;display:none}
+.start-btn:hover{box-shadow:0 0 60px rgba(0,255,255,.5);transform:translateY(-1px)}
 </style>
 </head>
 <body>
-<div id="app">
 
-  <!-- NO CAMERA SCREEN -->
-  <div id="no-camera">
-    <div class="camera-icon">📐</div>
-    <h2>Dim<span style="color:var(--accent)">Scan</span></h2>
-    <p>Measure real-world dimensions using your camera. Tap two points to measure — calibrate once with a known object for accuracy.</p>
-    <button id="start-btn" onclick="startCamera()">Enable Camera</button>
-  </div>
+<div id="loading">
+  <div class="load-title">DIM<span style="color:var(--accent)">SCAN</span></div>
+  <div class="load-sub">3D AR Measurement</div>
+  <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
+  <div id="load-status">Initialising…</div>
+  <button class="start-btn" id="start-btn" onclick="beginApp()">Enable Camera →</button>
+</div>
 
-  <!-- CAMERA VIEW -->
-  <div id="camera-container">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-  </div>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas3d"></canvas>
+<canvas id="canvas2d"></canvas>
+<div id="scanlines"></div>
 
-  <header>
-    <div class="logo">Dim<span>Scan</span></div>
-    <div class="unit-toggle">
-      <button class="unit-btn active" onclick="setUnit('cm')" id="btn-cm">cm</button>
-      <button class="unit-btn" onclick="setUnit('in')" id="btn-in">in</button>
-      <button class="unit-btn" onclick="setUnit('mm')" id="btn-mm">mm</button>
+<div id="ui">
+  <div id="header">
+    <div>
+      <div class="wordmark">Dim<em>Scan</em> <span style="font-size:16px;color:var(--muted);letter-spacing:1px">3D</span></div>
+      <div id="mode-chips">
+        <div class="chip active" id="chip-3d" onclick="setMode('3d')">3D Depth</div>
+        <div class="chip" id="chip-2d" onclick="setMode('2d')">2D Tap</div>
+      </div>
     </div>
-  </header>
+  </div>
 
-  <div id="status">Tap a point to start</div>
+  <div id="status-bar">
+    <div id="status-pill">Initialising…</div>
+    <div id="crosshair"><div class="ch-ring"></div></div>
+  </div>
 
-  <div id="history-list"></div>
+  <div id="depth-badge" style="display:none">
+    <span>Depth</span>
+    <span class="dbval" id="db-mode">—</span>
+    <span id="db-dist">—</span>
+  </div>
+
+  <div id="history"></div>
 
   <div id="panel">
-    <div id="measurement-display">
-      <div class="measure-value" id="measure-val">—</div>
-      <div class="measure-label" id="measure-lbl">tap two points on screen</div>
+    <div id="meas-display">
+      <div id="meas-primary">—</div>
+      <div style="display:flex;flex-direction:column;gap:2px;padding-bottom:10px">
+        <div id="meas-unit" style="display:none"></div>
+      </div>
+    </div>
+    <div id="meas-secondary">Point camera at a surface and tap</div>
+
+    <div id="unit-row">
+      <button class="ubtn active" id="ubtn-cm" onclick="setUnit('cm')">cm</button>
+      <button class="ubtn" id="ubtn-in" onclick="setUnit('in')">in</button>
+      <button class="ubtn" id="ubtn-mm" onclick="setUnit('mm')">mm</button>
+      <button class="ubtn" id="ubtn-m" onclick="setUnit('m')">m</button>
     </div>
 
-    <div id="calibration-row">
-      <span class="cal-label">Ref</span>
-      <input type="number" id="ref-input" value="30" min="0.1" step="0.1">
-      <span class="ref-unit" id="ref-unit-label">cm</span>
-      <div class="cal-divider"></div>
-      <span class="cal-hint">Set a known length, draw it on screen to calibrate</span>
+    <div id="autocal-strip">
+      <span class="ac-label">Auto-Cal</span>
+      <div class="ac-btns">
+        <button class="ac-btn" id="acbtn-card" onclick="startAutoCal('card')">💳 Card</button>
+        <button class="ac-btn" id="acbtn-a4" onclick="startAutoCal('a4')">📄 A4</button>
+        <button class="ac-btn" id="acbtn-hand" onclick="startAutoCal('hand')">🖐️ Hand</button>
+      </div>
+      <span id="cal-status">Uncal</span>
     </div>
 
-    <div id="controls">
-      <button class="btn btn-primary" id="action-btn" onclick="handleAction()">
-        <span id="action-icon">📍</span>
-        <span id="action-text">Set First Point</span>
+    <div id="btn-row">
+      <button class="abtn abtn-prime" id="main-btn" onclick="handleMainBtn()">
+        <span id="main-icon">📍</span><span id="main-label">Place First Point</span>
       </button>
-      <button class="btn btn-secondary" onclick="calibrate()">⚖️ Calibrate</button>
-      <button class="btn btn-danger" onclick="resetMeasure()">✕ Clear</button>
+      <button class="abtn abtn-sec" onclick="undoPoint()">↩ Undo</button>
+      <button class="abtn abtn-warn" onclick="clearAll()">✕ Clear</button>
     </div>
   </div>
 </div>
 
 <script>
-  let stream = null;
-  let points = [];
-  let calPoints = [];
-  let mode = 'measure'; // 'measure' | 'calibrate'
-  let pxPerUnit = null; // pixels per current unit
-  let currentUnit = 'cm';
-  let history = [];
-  let animFrame = null;
-  let videoReady = false;
+const state = {
+  mode:'3d', depthMode:null, unit:'cm',
+  points:[], calibrated:false, pxPerUnit:null,
+  history:[], xrSession:null, xrRefSpace:null,
+  xrDepthInfo:null, aiDepthMap:null, aiModel:null,
+  isScanning:false,
+};
 
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const statusEl = document.getElementById('status');
-  const measureVal = document.getElementById('measure-val');
-  const measureLbl = document.getElementById('measure-lbl');
-  const actionBtn = document.getElementById('action-btn');
-  const actionIcon = document.getElementById('action-icon');
-  const actionText = document.getElementById('action-text');
-  const historyList = document.getElementById('history-list');
-  const refInput = document.getElementById('ref-input');
-  const refUnitLabel = document.getElementById('ref-unit-label');
+const video=document.getElementById('video');
+const c3=document.getElementById('canvas3d'); const ctx3=c3.getContext('2d');
+const c2=document.getElementById('canvas2d'); const ctx2=c2.getContext('2d');
+const statusPill=document.getElementById('status-pill');
+const depthBadge=document.getElementById('depth-badge');
+const dbMode=document.getElementById('db-mode');
+const dbDist=document.getElementById('db-dist');
+const measPrim=document.getElementById('meas-primary');
+const measSec=document.getElementById('meas-secondary');
+const measUnit=document.getElementById('meas-unit');
+const calStatus=document.getElementById('cal-status');
+const histEl=document.getElementById('history');
+const loadFill=document.getElementById('load-fill');
+const loadStatus=document.getElementById('load-status');
+const mainLabel=document.getElementById('main-label');
+const mainIcon=document.getElementById('main-icon');
 
-  // ── UNIT conversions ──
-  const unitLabels = { cm: 'cm', in: 'in', mm: 'mm' };
+const unitConv={cm:100,in:39.3701,mm:1000,m:1};
+function toUnit(m){return m*unitConv[state.unit];}
+function setUnit(u){
+  state.unit=u;
+  document.querySelectorAll('.ubtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('ubtn-'+u).classList.add('active');
+  refreshMeasurement();
+}
+function setMode(m){
+  state.mode=m;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  document.getElementById('chip-'+m).classList.add('active');
+  clearAll();
+  setStatus(m==='3d'?'Point camera and tap to drop anchors':'Tap two points to measure','');
+}
 
-  function setUnit(u) {
-    // Convert existing calibration
-    if (pxPerUnit) {
-      const toCm = { cm: 1, in: 2.54, mm: 0.1 };
-      const pxPerCm = pxPerUnit * toCm[currentUnit];
-      const fromCm = { cm: 1, in: 1/2.54, mm: 10 };
-      pxPerUnit = pxPerCm * fromCm[u];
-    }
-    currentUnit = u;
-    document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('btn-' + u).classList.add('active');
-    refUnitLabel.textContent = u;
-    updateDisplay();
-    updateActionBtn();
+async function boot(){
+  setLoad(10,'Requesting camera…');
+  const camOk=await startCamera();
+  if(!camOk){setLoad(0,'Camera denied'); document.getElementById('start-btn').style.display='block'; return;}
+  setLoad(35,'Checking ARCore / WebXR…');
+  await sleep(200);
+  const hasXR=await checkWebXR();
+  if(hasXR){
+    setLoad(55,'Starting ARCore session…');
+    await startWebXR();
+  } else {
+    setLoad(55,'Loading AI depth (MiDaS)…');
+    await loadAIDepth();
   }
+  setLoad(100,'Ready');
+  await sleep(400);
+  document.getElementById('loading').classList.add('hidden');
+  startDrawLoop();
+}
 
-  // ── CAMERA ──
-  async function startCamera() {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false
-      });
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        videoReady = true;
-        resizeCanvas();
-        startDrawLoop();
-      };
-      document.getElementById('no-camera').style.display = 'none';
-      canvas.addEventListener('click', handleCanvasClick);
-      canvas.addEventListener('touchend', handleTouch, { passive: false });
-    } catch(e) {
-      alert('Camera access denied or not available. Please allow camera access and try again.');
-    }
-  }
+async function startCamera(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    video.srcObject=stream;
+    await new Promise(r=>{ video.onloadedmetadata=r; });
+    resizeCanvases(); return true;
+  }catch(e){return false;}
+}
 
-  function resizeCanvas() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-  }
-  window.addEventListener('resize', resizeCanvas);
+async function checkWebXR(){
+  if(!navigator.xr) return false;
+  try{return await navigator.xr.isSessionSupported('immersive-ar');}catch(e){return false;}
+}
 
-  // ── DRAW LOOP ──
-  function startDrawLoop() {
-    function loop() {
-      drawOverlay();
-      animFrame = requestAnimationFrame(loop);
-    }
-    loop();
-  }
-
-  function drawOverlay() {
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-
-    const pts = mode === 'calibrate' ? calPoints : points;
-
-    if (pts.length === 0) {
-      drawCrosshairHint(W/2, H/2);
-      return;
-    }
-
-    if (pts.length >= 1) {
-      drawPoint(pts[0].x, pts[0].y, '#00f5c4', 1);
-    }
-
-    if (pts.length === 2) {
-      drawLine(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
-      drawPoint(pts[1].x, pts[1].y, mode === 'calibrate' ? '#ffc800' : '#00f5c4', 2);
-      drawDimensionLabel(pts[0], pts[1]);
-    }
-
-    // Live line from first point to center hint
-    if (pts.length === 1) {
-      drawCrosshairHint(W/2, H/2, true);
-    }
-  }
-
-  function drawPoint(x, y, color, idx) {
-    // Outer ring pulse
-    ctx.beginPath();
-    ctx.arc(x, y, 22, 0, Math.PI * 2);
-    ctx.strokeStyle = color + '33';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Ring
-    ctx.beginPath();
-    ctx.arc(x, y, 14, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Fill
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // Label
-    ctx.font = '600 11px DM Mono, monospace';
-    ctx.fillStyle = color;
-    ctx.textAlign = 'center';
-    ctx.fillText('P' + idx, x, y - 22);
-  }
-
-  function drawLine(x1, y1, x2, y2) {
-    const isDashed = mode === 'calibrate';
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    if (isDashed) {
-      ctx.setLineDash([8, 5]);
-      ctx.strokeStyle = '#ffc800';
-    } else {
-      ctx.setLineDash([]);
-      ctx.strokeStyle = '#00f5c4';
-    }
-    ctx.lineWidth = 2;
-    ctx.shadowColor = isDashed ? '#ffc80066' : '#00f5c466';
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.restore();
-
-    // Tick marks at endpoints
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const perp = angle + Math.PI / 2;
-    const tickLen = 10;
-    [[x1,y1],[x2,y2]].forEach(([tx,ty]) => {
-      ctx.beginPath();
-      ctx.moveTo(tx + Math.cos(perp) * tickLen, ty + Math.sin(perp) * tickLen);
-      ctx.lineTo(tx - Math.cos(perp) * tickLen, ty - Math.sin(perp) * tickLen);
-      ctx.strokeStyle = isDashed ? '#ffc800' : '#00f5c4';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+async function startWebXR(){
+  try{
+    const session=await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['local'],
+      optionalFeatures:['depth-sensing'],
+      depthSensing:{usagePreference:['cpu-optimized'],dataFormatPreference:['luminance-alpha']}
     });
-  }
-
-  function drawDimensionLabel(p1, p2) {
-    const mx = (p1.x + p2.x) / 2;
-    const my = (p1.y + p2.y) / 2;
-    const dx = p2.x - p1.x, dy = p2.y - p1.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const angle = Math.atan2(dy, dx);
-
-    let label = '';
-    if (mode === 'calibrate') {
-      label = `REF: ${parseFloat(refInput.value).toFixed(1)} ${currentUnit}`;
-    } else if (pxPerUnit) {
-      const measured = dist / pxPerUnit;
-      label = `${measured.toFixed(1)} ${currentUnit}`;
-    } else {
-      label = `${Math.round(dist)} px (not calibrated)`;
-    }
-
-    const offsetY = -22;
-    const cosA = Math.cos(angle - Math.PI/2);
-    const sinA = Math.sin(angle - Math.PI/2);
-
-    ctx.save();
-    ctx.translate(mx + cosA * offsetY, my + sinA * offsetY);
-
-    const padding = { x: 12, y: 8 };
-    ctx.font = '600 13px DM Mono, monospace';
-    const tw = ctx.measureText(label).width;
-    const bw = tw + padding.x * 2, bh = 28;
-
-    // Background pill
-    ctx.beginPath();
-    roundRect(ctx, -bw/2, -bh/2, bw, bh, 6);
-    ctx.fillStyle = mode === 'calibrate' ? 'rgba(255,200,0,0.15)' : 'rgba(0,245,196,0.12)';
-    ctx.fill();
-    ctx.strokeStyle = mode === 'calibrate' ? '#ffc800' : '#00f5c4';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.fillStyle = mode === 'calibrate' ? '#ffc800' : '#00f5c4';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
-  }
-
-  function drawCrosshairHint(x, y, small) {
-    const size = small ? 12 : 18;
-    const color = 'rgba(255,255,255,0.3)';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3,3]);
-    ctx.beginPath();
-    ctx.moveTo(x - size, y); ctx.lineTo(x + size, y);
-    ctx.moveTo(x, y - size); ctx.lineTo(x, y + size);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI*2);
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-
-  // ── INPUT HANDLING ──
-  function handleTouch(e) {
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    const rect = canvas.getBoundingClientRect();
-    addPoint(t.clientX - rect.left, t.clientY - rect.top);
-  }
-  function handleCanvasClick(e) {
-    const rect = canvas.getBoundingClientRect();
-    addPoint(e.clientX - rect.left, e.clientY - rect.top);
-  }
-
-  function addPoint(x, y) {
-    const pts = mode === 'calibrate' ? calPoints : points;
-
-    if (pts.length >= 2) {
-      // Reset and start fresh
-      if (mode === 'calibrate') calPoints = [];
-      else points = [];
-      addPoint(x, y);
-      return;
-    }
-
-    const arr = mode === 'calibrate' ? calPoints : points;
-    arr.push({ x, y });
-
-    if (arr.length === 2) {
-      if (mode === 'calibrate') {
-        finishCalibration();
-      } else {
-        finishMeasurement();
-      }
-    } else {
-      updateStatus('step-2', mode === 'calibrate' ? '📍 Tap second calibration point' : '📍 Tap second point');
-      updateActionBtn();
-    }
-  }
-
-  function finishMeasurement() {
-    if (points.length < 2) return;
-    const dx = points[1].x - points[0].x;
-    const dy = points[1].y - points[0].y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-
-    let label;
-    if (pxPerUnit) {
-      const val = dist / pxPerUnit;
-      label = `${val.toFixed(2)} ${currentUnit}`;
-      measureVal.textContent = val.toFixed(1);
-      measureVal.className = 'measure-value has-value';
-      measureLbl.textContent = `measured · ${currentUnit}`;
-      addHistory(val.toFixed(2) + ' ' + currentUnit);
-    } else {
-      label = `${Math.round(dist)} px`;
-      measureVal.textContent = Math.round(dist) + ' px';
-      measureVal.className = 'measure-value has-value';
-      measureLbl.textContent = 'pixels (calibrate for real units)';
-    }
-
-    updateStatus('done', '✓ Measured — tap to remeasure');
-    updateActionBtn();
-  }
-
-  function finishCalibration() {
-    if (calPoints.length < 2) return;
-    const dx = calPoints[1].x - calPoints[0].x;
-    const dy = calPoints[1].y - calPoints[0].y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const refVal = parseFloat(refInput.value);
-    if (!refVal || refVal <= 0) { alert('Enter a valid reference value.'); return; }
-    pxPerUnit = dist / refVal;
-
-    mode = 'measure';
-    calPoints = [];
-    updateStatus('step-1', '✓ Calibrated — tap to measure');
-    measureLbl.textContent = `calibrated: ${refVal} ${currentUnit} = ${Math.round(dist)} px`;
-    updateActionBtn();
-    actionBtn.classList.remove('btn-secondary');
-    actionBtn.classList.add('btn-primary');
-  }
-
-  function calibrate() {
-    mode = 'calibrate';
-    calPoints = [];
-    points = [];
-    updateStatus('step-1', '📏 Tap first point of known reference');
-    measureVal.textContent = '—';
-    measureVal.className = 'measure-value';
-    measureLbl.textContent = `draw your ${refInput.value} ${currentUnit} reference`;
-    updateActionBtn();
-  }
-
-  function handleAction() {
-    // Simulate a tap at canvas center if user wants step-by-step
-    updateStatus('step-1', mode === 'calibrate' ? '📏 Tap first calibration point' : '📍 Tap first point on screen');
-    if (mode === 'measure' && points.length === 0) {
-      measureVal.textContent = '—';
-      measureLbl.textContent = 'tap two points on screen';
-    }
-  }
-
-  function resetMeasure() {
-    points = [];
-    calPoints = [];
-    mode = 'measure';
-    measureVal.textContent = '—';
-    measureVal.className = 'measure-value';
-    measureLbl.textContent = 'tap two points on screen';
-    updateStatus('', 'Tap a point to start');
-    updateActionBtn();
-  }
-
-  function updateStatus(cls, msg) {
-    statusEl.className = cls;
-    statusEl.textContent = msg;
-  }
-
-  function updateDisplay() {
-    if (points.length === 2 && pxPerUnit) {
-      const dx = points[1].x - points[0].x;
-      const dy = points[1].y - points[0].y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      const val = dist / pxPerUnit;
-      measureVal.textContent = val.toFixed(1);
-      measureLbl.textContent = `measured · ${currentUnit}`;
-    }
-  }
-
-  function updateActionBtn() {
-    if (mode === 'calibrate') {
-      actionIcon.textContent = '📏';
-      actionText.textContent = calPoints.length === 0 ? 'Tap 1st Ref Point' : 'Tap 2nd Ref Point';
-    } else if (points.length === 0) {
-      actionIcon.textContent = '📍';
-      actionText.textContent = 'Tap 1st Point';
-    } else if (points.length === 1) {
-      actionIcon.textContent = '📍';
-      actionText.textContent = 'Tap 2nd Point';
-    } else {
-      actionIcon.textContent = '🔄';
-      actionText.textContent = 'Measure Again';
-    }
-  }
-
-  function addHistory(label) {
-    history.unshift(label);
-    if (history.length > 5) history.pop();
-    historyList.innerHTML = '';
-    history.forEach((h, i) => {
-      const el = document.createElement('div');
-      el.className = 'history-item';
-      el.innerHTML = `<span class="hi-label">#${history.length - i}</span>${h}`;
-      historyList.appendChild(el);
+    state.xrSession=session;
+    state.depthMode='webxr';
+    const refSpace=await session.requestReferenceSpace('local');
+    state.xrRefSpace=refSpace;
+    session.addEventListener('end',()=>{state.xrSession=null;});
+    session.requestAnimationFrame(function xrFrame(t,frame){
+      if(!frame) return;
+      try{
+        const pose=frame.getViewerPose(refSpace);
+        if(pose){const depth=frame.getDepthInformation?.(pose.views[0]); if(depth) state.xrDepthInfo=depth;}
+      }catch(e){}
+      session.requestAnimationFrame(xrFrame);
     });
+    dbMode.textContent='ARCore'; depthBadge.className='xr'; depthBadge.style.display='block';
+    setStatus('ARCore depth active — tap to measure','good');
+  }catch(e){
+    console.warn('WebXR failed:',e);
+    await loadAIDepth();
   }
+}
 
-  // Auto-attempt camera on load
-  window.addEventListener('load', () => {
-    resizeCanvas();
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      startCamera();
+async function loadAIDepth(){
+  try{
+    setLoad(62,'Loading TensorFlow.js…');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
+    setLoad(78,'Loading depth-estimation model…');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/depth-estimation@0.0.3/dist/depth-estimation.min.js');
+    setLoad(90,'Warming model…');
+    state.aiModel=await depthEstimation.createEstimator(
+      depthEstimation.SupportedModels.ARPortraitDepth,{outputDepthRange:[0,10]}
+    );
+    state.depthMode='ai';
+    dbMode.textContent='AI Depth'; depthBadge.className='ai'; depthBadge.style.display='block';
+    setStatus('AI depth ready — tap to measure','active');
+    runAIDepthLoop();
+  }catch(e){
+    console.warn('AI depth failed:',e);
+    fallbackNoDepth();
+  }
+}
+
+function fallbackNoDepth(){
+  state.depthMode='none';
+  dbMode.textContent='Cal Mode'; depthBadge.style.display='block';
+  setMode('2d');
+  document.getElementById('chip-3d').style.opacity='0.35';
+  document.getElementById('chip-3d').style.pointerEvents='none';
+  setStatus('No depth sensor — use Auto-Cal below','warn');
+}
+
+async function runAIDepthLoop(){
+  if(!state.aiModel) return;
+  try{
+    const result=await state.aiModel.estimateDepth(video,{minDepth:0,maxDepth:10});
+    if(result?.depthTensor){
+      const data=await result.depthTensor.data();
+      state.aiDepthMap={data,width:result.depthTensor.shape[1],height:result.depthTensor.shape[0]};
+      result.depthTensor.dispose();
     }
+  }catch(e){}
+  setTimeout(runAIDepthLoop,200);
+}
+
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function setLoad(pct,msg){loadFill.style.width=pct+'%';loadStatus.textContent=msg;}
+async function beginApp(){await boot();}
+
+function resizeCanvases(){[c3,c2].forEach(c=>{c.width=window.innerWidth;c.height=window.innerHeight;});}
+window.addEventListener('resize',resizeCanvases);
+
+function sampleDepth(sx,sy){
+  if(state.depthMode==='webxr'&&state.xrDepthInfo){
+    try{const d=state.xrDepthInfo.getDepthInMeters(sx/window.innerWidth,sy/window.innerHeight);if(d&&d>0.05&&d<20)return d;}catch(e){}
+  }
+  if(state.depthMode==='ai'&&state.aiDepthMap){
+    const{data,width,height}=state.aiDepthMap;
+    const px=Math.round((sx/window.innerWidth)*(width-1));
+    const py=Math.round((sy/window.innerHeight)*(height-1));
+    const idx=py*width+px;
+    if(idx>=0&&idx<data.length){const raw=data[idx];const m=raw>0.01?1.0/(raw*5+0.1):null;if(m&&m>0.05&&m<15)return m;}
+  }
+  return null;
+}
+
+c2.addEventListener('touchend',e=>{e.preventDefault();const t=e.changedTouches[0];addPoint(t.clientX,t.clientY);},{passive:false});
+c2.addEventListener('click',e=>addPoint(e.clientX,e.clientY));
+
+function addPoint(sx,sy){
+  if(state.isScanning) return;
+  if(state.points.length>=2){state.points=[];clearMeasureDisplay();}
+  const depth=sampleDepth(sx,sy);
+  const pt={sx,sy,depth};
+  if(depth){
+    const fovY=60*Math.PI/180;const aspect=window.innerWidth/window.innerHeight;
+    const fovX=2*Math.atan(Math.tan(fovY/2)*aspect);
+    const nx=(sx/window.innerWidth-0.5)*2;const ny=(sy/window.innerHeight-0.5)*2;
+    pt.worldX=nx*depth*Math.tan(fovX/2);pt.worldY=ny*depth*Math.tan(fovY/2);pt.worldZ=depth;
+  }
+  state.points.push(pt);
+  updateMainBtn();
+  if(state.points.length===2) compute3DDistance(state.points[0],state.points[1]);
+  else setStatus('Tap second point to measure','active');
+}
+
+function undoPoint(){state.points.pop();clearMeasureDisplay();updateMainBtn();if(!state.points.length)setStatus('Tap to place first point','');}
+function clearAll(){state.points=[];clearMeasureDisplay();updateMainBtn();setStatus(state.mode==='3d'?'Point camera and tap':'Tap two points','');}
+function clearMeasureDisplay(){measPrim.textContent='—';measPrim.className='';measSec.textContent='Tap two points to measure';measUnit.style.display='none';}
+function handleMainBtn(){addPoint(window.innerWidth/2,window.innerHeight/2);}
+function updateMainBtn(){
+  const n=state.points.length;
+  if(n===0){mainIcon.textContent='📍';mainLabel.textContent='Place First Point';}
+  else if(n===1){mainIcon.textContent='📍';mainLabel.textContent='Place Second Point';}
+  else{mainIcon.textContent='🔄';mainLabel.textContent='New Measurement';}
+}
+
+function compute3DDistance(p1,p2){
+  let meters=null;
+  if(p1.worldX!==undefined&&p2.worldX!==undefined){
+    const dx=p2.worldX-p1.worldX,dy=p2.worldY-p1.worldY,dz=p2.worldZ-p1.worldZ;
+    meters=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  } else if(state.pxPerUnit){
+    const dx=p2.sx-p1.sx,dy=p2.sy-p1.sy,px=Math.sqrt(dx*dx+dy*dy);
+    const mPerUnit={cm:0.01,in:0.0254,mm:0.001,m:1};
+    meters=(px/state.pxPerUnit)*mPerUnit[state.unit];
+  } else {
+    const dx=p2.sx-p1.sx,dy=p2.sy-p1.sy,px=Math.sqrt(dx*dx+dy*dy);
+    measPrim.textContent=Math.round(px)+'px'; measPrim.className='pop';
+    measSec.textContent='Calibrate for real units ↓';
+    setStatus('Measured in pixels — calibrate below','warn');
+    return;
+  }
+  if(meters&&meters>0) showMeasurement(meters);
+}
+
+function showMeasurement(meters){
+  const val=toUnit(meters);const label=val.toFixed(val<10?2:1);
+  measPrim.textContent=label; measPrim.className='pop';
+  measUnit.textContent=state.unit; measUnit.style.display='block';
+  measSec.textContent=state.depthMode==='webxr'?'3D ARCore measurement':state.depthMode==='ai'?'3D AI depth estimate':'2D calibrated measurement';
+  setStatus(`${label} ${state.unit} — tap to remeasure`,'good');
+  state.history.unshift(`${label} ${state.unit}`);
+  if(state.history.length>4) state.history.pop();
+  renderHistory();
+}
+
+function refreshMeasurement(){if(state.points.length>=2) compute3DDistance(state.points[0],state.points[1]);}
+
+function renderHistory(){
+  histEl.innerHTML=state.history.map((h,i)=>`<div class="hitem"><div class="hitem-lbl">#${state.history.length-i}</div><div class="hitem-val">${h}</div></div>`).join('');
+}
+
+// ── AUTO CALIBRATION ──
+const refDims={
+  card:{w:0.0856,h:0.054,label:'Credit Card'},
+  a4:{w:0.297,h:0.210,label:'A4 Paper'},
+  hand:{w:0.080,h:0.190,label:'Hand'},
+};
+
+function startAutoCal(type){
+  if(state.isScanning) return;
+  state.isScanning=true;
+  const btn=document.getElementById('acbtn-'+type);
+  btn.classList.add('scanning'); btn.textContent='⌛ Scanning…';
+  calStatus.textContent='Scanning…';
+  setStatus(`Hold ${refDims[type].label} flat in frame…`,'warn');
+  setTimeout(()=>attemptAutoCal(type,btn),1800);
+}
+
+function attemptAutoCal(type,btn){
+  const off=document.createElement('canvas'); off.width=320; off.height=240;
+  const octx=off.getContext('2d');
+  octx.drawImage(video,0,0,320,240);
+  const result=detectRectangle(octx,320,240,type)||estimateCenterRect(type,true);
+  finishAutoCal(type,result,btn,result.estimated);
+}
+
+function detectRectangle(octx,w,h,type){
+  const img=octx.getImageData(0,0,w,h);const d=img.data;
+  let edges=[];
+  for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){
+    const i=(y*w+x)*4;const gray=(d[i]+d[i+1]+d[i+2])/3;
+    const r=(y*w+(x+1))*4,dn=((y+1)*w+x)*4;
+    const gr=(d[r]+d[r+1]+d[r+2])/3,gd=(d[dn]+d[dn+1]+d[dn+2])/3;
+    if(Math.abs(gray-gr)+Math.abs(gray-gd)>40) edges.push([x,y]);
+  }}
+  if(edges.length<80) return null;
+  const cx=w/2,cy=h/2;
+  const near=edges.filter(([x,y])=>Math.abs(x-cx)<cx*.8&&Math.abs(y-cy)<cy*.8);
+  if(near.length<40) return null;
+  const xs=near.map(e=>e[0]),ys=near.map(e=>e[1]);
+  const rw=Math.max(...xs)-Math.min(...xs),rh=Math.max(...ys)-Math.min(...ys);
+  const ref=refDims[type];
+  if(Math.abs((rw/rh)-(ref.w/ref.h))/(ref.w/ref.h)>0.45) return null;
+  const sw=rw*(window.innerWidth/w);
+  return{pxPerCm:sw/(ref.w*100)};
+}
+
+function estimateCenterRect(type,estimated=true){
+  const ref=refDims[type];
+  const sw=window.innerWidth*0.42;
+  return{pxPerCm:sw/(ref.w*100),estimated};
+}
+
+function finishAutoCal(type,result,btn,estimated){
+  state.isScanning=false;
+  const cmPerUnit={cm:1,in:2.54,mm:0.1,m:100};
+  state.pxPerUnit=result.pxPerCm*cmPerUnit[state.unit];
+  state.calibrated=true;
+  btn.classList.remove('scanning'); btn.classList.add('done');
+  btn.textContent=(estimated?'~':'✓')+' '+refDims[type].label;
+  calStatus.textContent=(estimated?'~':'')+Math.round(result.pxPerCm)+'px/cm';
+  setStatus(estimated?`Estimated cal (${refDims[type].label}) — hold object closer for accuracy`:`Calibrated via ${refDims[type].label}`,'good');
+}
+
+// ── DRAW ──
+function startDrawLoop(){(function loop(){draw();requestAnimationFrame(loop);})();}
+
+function draw(){
+  const W=c2.width,H=c2.height;
+  ctx2.clearRect(0,0,W,H); ctx3.clearRect(0,0,c3.width,c3.height);
+  const d=sampleDepth(W/2,H/2);
+  if(d) dbDist.textContent=toUnit(d).toFixed(2)+' '+state.unit;
+  drawPoints();
+}
+
+function drawPoints(){
+  const pts=state.points;
+  if(!pts.length) return;
+  pts.forEach((pt,i)=>drawAnchor(pt.sx,pt.sy,i+1,pt.depth));
+  for(let i=0;i<pts.length-1;i++) drawMeasureLine(pts[i],pts[i+1]);
+}
+
+function drawAnchor(x,y,idx,depth){
+  ctx2.beginPath(); ctx2.arc(x,y,24,0,Math.PI*2);
+  ctx2.strokeStyle='rgba(0,255,255,0.15)'; ctx2.lineWidth=1; ctx2.stroke();
+  ctx2.beginPath(); ctx2.arc(x,y,14,0,Math.PI*2);
+  ctx2.strokeStyle='#0ff'; ctx2.lineWidth=2;
+  ctx2.shadowColor='#0ff'; ctx2.shadowBlur=10; ctx2.stroke(); ctx2.shadowBlur=0;
+  ctx2.beginPath(); ctx2.arc(x,y,4,0,Math.PI*2); ctx2.fillStyle='#0ff'; ctx2.fill();
+  if(depth){
+    ctx2.font='500 10px DM Mono,monospace'; ctx2.fillStyle='rgba(0,255,255,0.8)';
+    ctx2.textAlign='center'; ctx2.fillText(toUnit(depth).toFixed(1)+state.unit,x,y-26);
+  }
+  ctx2.font='500 10px DM Mono,monospace'; ctx2.fillStyle='#0ff';
+  ctx2.textAlign='center'; ctx2.fillText('P'+idx,x,y+26);
+}
+
+function drawMeasureLine(p1,p2){
+  ctx2.save();
+  ctx2.beginPath(); ctx2.moveTo(p1.sx,p1.sy); ctx2.lineTo(p2.sx,p2.sy);
+  ctx2.strokeStyle='rgba(0,255,255,0.7)'; ctx2.lineWidth=2; ctx2.setLineDash([6,4]);
+  ctx2.shadowColor='#0ff'; ctx2.shadowBlur=6; ctx2.stroke();
+  ctx2.restore();
+  const angle=Math.atan2(p2.sy-p1.sy,p2.sx-p1.sx),perp=angle+Math.PI/2;
+  [[p1.sx,p1.sy],[p2.sx,p2.sy]].forEach(([tx,ty])=>{
+    ctx2.beginPath();
+    ctx2.moveTo(tx+Math.cos(perp)*10,ty+Math.sin(perp)*10);
+    ctx2.lineTo(tx-Math.cos(perp)*10,ty-Math.sin(perp)*10);
+    ctx2.strokeStyle='#0ff'; ctx2.lineWidth=2; ctx2.shadowBlur=4; ctx2.stroke(); ctx2.shadowBlur=0;
   });
+  const mx=(p1.sx+p2.sx)/2,my=(p1.sy+p2.sy)/2;
+  const val=measPrim.textContent;
+  if(val!=='—'&&!val.endsWith('px')) drawBubbleLabel(mx,my-22,`${val} ${state.unit}`);
+}
+
+function drawBubbleLabel(x,y,text){
+  ctx2.save();
+  ctx2.font='600 13px DM Mono,monospace';
+  const tw=ctx2.measureText(text).width,pw=tw+20,ph=26;
+  ctx2.beginPath(); roundRect(ctx2,x-pw/2,y-ph/2,pw,ph,6);
+  ctx2.fillStyle='rgba(0,255,255,0.12)'; ctx2.fill();
+  ctx2.strokeStyle='rgba(0,255,255,0.6)'; ctx2.lineWidth=1; ctx2.stroke();
+  ctx2.fillStyle='#0ff'; ctx2.textAlign='center'; ctx2.textBaseline='middle';
+  ctx2.fillText(text,x,y);
+  ctx2.restore();
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+
+function setStatus(msg,cls){statusPill.textContent=msg;statusPill.className=cls||'';}
+
+window.addEventListener('load',()=>{resizeCanvases();boot();});
 </script>
 </body>
 </html>
