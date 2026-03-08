@@ -392,7 +392,13 @@ async function tryWebXR() {
     S.depthMode = 'webxr';
     const rs = await session.requestReferenceSpace('local');
     S.xrRefSpace = rs;
-    session.addEventListener('end', () => { S.xrSession = null; S.depthMode = '2d-cal'; });
+
+    session.addEventListener('end', () => {
+      S.xrSession = null; S.xrDepthInfo = null; S.depthMode = '2d-cal';
+      fallbackToCalMode();
+    });
+
+    // XR frame loop — keep depth map fresh
     session.requestAnimationFrame(function xf(t, frame) {
       if (!frame) return;
       try {
@@ -404,10 +410,22 @@ async function tryWebXR() {
       } catch (e) {}
       session.requestAnimationFrame(xf);
     });
+
+    // In immersive-ar, the XR compositor swallows all touch events.
+    // 'select' is the correct way to detect taps in AR mode.
+    // The tap always anchors to screen centre (aim with the crosshair).
+    session.addEventListener('select', () => {
+      if (S.scanning || S.manualDrawing) return;
+      const sx = window.innerWidth  / 2;
+      const sy = window.innerHeight / 2;
+      const depth = sampleDepth(sx, sy);
+      placePoint(sx, sy, depth);
+    });
+
     dbMode.textContent = 'ARCore';
     dbBadge.className = 'xr';
     dbBadge.style.display = 'block';
-    setStatus('ARCore depth active — tap to measure', 'good');
+    setStatus('AR ready — aim crosshair & tap to place point', 'good');
     return true;
   } catch (e) { console.warn('WebXR:', e.message); return false; }
 }
@@ -428,32 +446,37 @@ function sampleDepth(sx, sy) {
 // ─────────────────────────────────────────────────
 //  INPUT
 // ─────────────────────────────────────────────────
+
+// Regular touch/click — only used when NOT in immersive-ar mode
 c2.addEventListener('touchend', e => {
+  if (S.depthMode === 'webxr') return; // XR select handles taps in AR mode
   e.preventDefault();
   const t = e.changedTouches[0];
   handleTap(t.clientX, t.clientY);
 }, { passive: false });
-c2.addEventListener('click', e => handleTap(e.clientX, e.clientY));
+c2.addEventListener('click', e => {
+  if (S.depthMode === 'webxr') return;
+  handleTap(e.clientX, e.clientY);
+});
 
 function handleTap(sx, sy) {
   if (S.scanning) return;
-
-  // Manual calibration draw mode
   if (S.manualDrawing) {
     S.pts.push({ sx, sy, depth: null });
     if (S.pts.length === 2) finishManualCal();
     else setStatus('Now tap the other end of the object', 'active');
     return;
   }
+  const depth = sampleDepth(sx, sy);
+  placePoint(sx, sy, depth);
+}
 
-  // Normal measurement — reset if 2 points already placed
+// Shared point placement — called from both handleTap and XR select
+function placePoint(sx, sy, depth) {
   if (S.pts.length >= 2) { S.pts = []; clearDisplay(); }
 
-  const depth = sampleDepth(sx, sy);
   const pt = { sx, sy, depth };
-
   if (depth) {
-    // Back-project to rough 3D world coords
     const fovY = 60 * Math.PI / 180;
     const aspect = window.innerWidth / window.innerHeight;
     const fovX = 2 * Math.atan(Math.tan(fovY / 2) * aspect);
@@ -468,7 +491,7 @@ function handleTap(sx, sy) {
   updateBtn();
 
   if (S.pts.length === 2) measure(S.pts[0], S.pts[1]);
-  else setStatus('Tap second point', 'active');
+  else setStatus(S.depthMode === 'webxr' ? 'Aim & tap to place second point' : 'Tap second point', 'active');
 }
 
 function mainAction() {
