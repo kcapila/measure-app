@@ -302,32 +302,67 @@ async function boot() {
     return;
   }
 
-  setLd(35, 'Checking WebXR / ARCore…');
+  setLd(50, 'Checking ARCore support…');
   await sleep(200);
 
-  const xrOk = await tryWebXR();
+  // Check if WebXR immersive-ar is supported (no session yet — just a check)
+  const xrAvailable = navigator.xr
+    ? await navigator.xr.isSessionSupported('immersive-ar').catch(() => false)
+    : false;
 
-  if (!xrOk) {
-    // 3D not available — switch to 2D mode, enable cal tools
-    S.depthMode = '2d-cal';
-    S.mode = '2d';
-    document.getElementById('chip-3d').classList.add('disabled');
-    document.getElementById('chip-2d').classList.add('active');
-    document.getElementById('chip-3d').classList.remove('active');
-    dbMode.textContent = 'Cal Mode';
-    dbBadge.className = 'cal';
-    dbBadge.style.display = 'block';
-    setLd(100, 'Ready — calibrate for real units');
-    await sleep(350);
-    document.getElementById('loading').classList.add('gone');
-    setStatus('No depth sensor — tap Auto-Cal or enter manually', 'warn');
+  setLd(100, xrAvailable ? 'ARCore available — tap to activate' : 'Ready — calibrate for real units');
+  await sleep(350);
+  document.getElementById('loading').classList.add('gone');
+
+  if (xrAvailable) {
+    // Show an "Enable AR" button — WebXR REQUIRES a direct user gesture to start a session
+    setStatus('Tap "Enable AR" to activate depth sensing', 'active');
+    showEnableARButton();
   } else {
-    setLd(100, 'ARCore ready');
-    await sleep(350);
-    document.getElementById('loading').classList.add('gone');
+    fallbackToCalMode();
   }
 
   startLoop();
+}
+
+function showEnableARButton() {
+  // Inject a prominent button into the panel area
+  const existing = document.getElementById('ar-activate-btn');
+  if (existing) return;
+  const btn = document.createElement('button');
+  btn.id = 'ar-activate-btn';
+  btn.textContent = '🔬 Enable AR Depth';
+  btn.style.cssText = `
+    position:fixed;bottom:280px;left:50%;transform:translateX(-50%);z-index:50;
+    background:#39ff14;color:#000;border:none;cursor:pointer;
+    font-family:'DM Mono',monospace;font-size:13px;font-weight:500;
+    border-radius:10px;padding:14px 28px;
+    box-shadow:0 0 30px rgba(57,255,20,.4);letter-spacing:.5px;
+    white-space:nowrap;
+  `;
+  btn.onclick = activateARFromGesture;
+  document.body.appendChild(btn);
+}
+
+// This function is called from a real user tap — required by Chrome for WebXR
+async function activateARFromGesture() {
+  const btn = document.getElementById('ar-activate-btn');
+  if (btn) { btn.textContent = '⌛ Starting ARCore…'; btn.style.pointerEvents = 'none'; }
+  const ok = await tryWebXR();
+  if (btn) btn.remove();
+  if (!ok) fallbackToCalMode();
+}
+
+function fallbackToCalMode() {
+  S.depthMode = '2d-cal';
+  S.mode = '2d';
+  document.getElementById('chip-3d').classList.add('disabled');
+  document.getElementById('chip-2d').classList.add('active');
+  document.getElementById('chip-3d').classList.remove('active');
+  dbMode.textContent = 'Cal Mode';
+  dbBadge.className = 'cal';
+  dbBadge.style.display = 'block';
+  setStatus('No depth sensor — use Auto-Cal or enter manually', 'warn');
 }
 
 async function startCam() {
