@@ -527,12 +527,15 @@ function measure(p1, p2) {
     const dx = p2.wx - p1.wx, dy = p2.wy - p1.wy, dz = p2.wz - p1.wz;
     meters = Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
-  // 2D calibrated
+  // 2D calibrated — with live zoom correction
   else if (S.cal) {
     const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
     const px = Math.sqrt(dx * dx + dy * dy);
-    const cmPerUnit = { cm: 1, in: 2.54, mm: 0.1, m: 100 };
-    meters = (px / S.cal.pxPerCm) * 0.01; // px→cm→m
+    // liveScale = currentZoom / calZoom. If zoomed out (object looks smaller),
+    // liveScale < 1, so we divide by a smaller number = correctly larger result.
+    const scale = (S.liveScale && S.cal.calPxWidth) ? S.liveScale : 1.0;
+    const effectivePxPerCm = S.cal.pxPerCm * scale;
+    meters = (px / effectivePxPerCm) * 0.01; // px→cm→m
   }
   // Pixel fallback
   else {
@@ -556,7 +559,9 @@ function showResult(meters) {
   mVal.className = 'pop';
   mUnit.textContent = S.unit;
   mUnit.style.display = 'block';
+  const scaleActive = S.cal && S.cal.calPxWidth && S.liveScale !== 1.0;
   mSub.textContent = S.depthMode === 'webxr' ? '3D ARCore measurement'
+                   : scaleActive ? `2D + live scale (${Math.round(S.liveScale * 100)}% zoom)`
                    : S.cal ? '2D calibrated measurement'
                    : 'measurement';
   setStatus(`${lbl} ${S.unit} ✓`, 'good');
@@ -582,73 +587,139 @@ function renderHistory() {
 }
 
 // ─────────────────────────────────────────────────
-//  AUTO-CALIBRATION
+//  CALIBRATION  (focal-length based — zoom-invariant)
 // ─────────────────────────────────────────────────
+//
+//  Core idea (pinhole camera model):
+//    pixelSize = focalPx * realSizeCm / distanceCm
+//  →  focalPx  = pixelSize * distanceCm / realSizeCm
+//  →  distanceCm = focalPx * realSizeCm / pixelSize  (at any zoom)
+//  →  realSizeCm = pixelDist * realSizeCm / pixelSize (at same distance)
+//
+//  We don't know distanceCm, but we don't need to!
+//  We store:  focalPx = pxWidth_at_cal * (some_distance / refWidthCm)
+//  Since distance cancels when measuring objects AT THE SAME PLANE,
+//  what we actually store is the "effective focal length" = pxPerCm * distance.
+//
+//  Live scale correction: each frame we re-detect the ref object and
+//  compute liveScale = currentPxWidth / calPxWidth.
+//  Then: trueMeasurement = rawPixelDist / (calPxPerCm * liveScale)
+//
 const REF = {
-  card: { w: 8.56, h: 5.40, label: 'Credit Card' },   // cm
+  card: { w: 8.56, h: 5.40, label: 'Credit Card' },
   a4:   { w: 29.7, h: 21.0, label: 'A4 Paper' },
   hand: { w: 8.0,  h: 19.0, label: 'Hand Width' },
 };
+
+// Calibration state
+// S.cal = { pxPerCm, calPxWidth, refType, focalPx }
+// S.liveScale = current zoom correction factor (1.0 = same as cal distance)
 
 function autoCal(type) {
   if (S.scanning) return;
   S.scanning = true;
   const btn = document.getElementById('cb-' + type);
   btn.classList.add('scanning');
-  const origText = btn.innerHTML;
   btn.innerHTML = '⌛<br>Scanning…';
   calSt.textContent = 'Scanning';
   setStatus(`Hold ${REF[type].label} flat & centred in frame…`, 'warn');
 
   setTimeout(() => {
     const result = detectRect(type) || guestimate(type);
-    applyCalibration(result.pxPerCm, REF[type].label, result.estimated);
+
+    // Store focal length: focalPx = pxWidth * (distance / realWidth)
+    // We treat distance as 1 unit (unknown), so focalPx = pxWidth / realWidthCm
+    // This lets us later compute: realCm = measuredPx / (focalPx / currentPxWidth * realWidthCm)
+    //                                     = measuredPx * currentPxWidth / (focalPx * realWidthCm)
+    // Simplified: realCm = measuredPx / liveScale / calPxPerCm
+    const focalPx = result.pxWidth; // pxWidth at cal distance (distance normalised to 1)
+
+    S.cal = {
+      pxPerCm:   result.pxPerCm,
+      calPxWidth: result.pxWidth,   // ref object width in px AT calibration time
+      refType:    type,
+      focalPx,
+    };
+    S.liveScale = 1.0;
+
+    // Start continuous scale tracking
+    startScaleTracking(type);
+
+    calSt.textContent = (result.estimated ? '~' : '') + Math.round(result.pxPerCm) + 'px/cm';
     btn.classList.remove('scanning');
     btn.classList.add('done');
     btn.innerHTML = (result.estimated ? '~' : '✓') + '<br>' + REF[type].label.split(' ')[0];
     S.scanning = false;
+    setStatus(result.estimated
+      ? `~Cal via ${REF[type].label} — move closer for accuracy`
+      : `Calibrated ✓ — zoom freely, scale auto-adjusts`, 'good');
+    dbMode.textContent = 'Live Scale';
+    dbBadge.className = 'cal';
+    dbBadge.style.display = 'block';
   }, 1600);
+}
+
+// Continuously re-detect the reference object to get live scale
+let scaleTrackInterval = null;
+function startScaleTracking(type) {
+  if (scaleTrackInterval) clearInterval(scaleTrackInterval);
+  scaleTrackInterval = setInterval(() => {
+    if (!S.cal) return;
+    const result = detectRect(type);
+    if (result && result.pxWidth > 0) {
+      S.liveScale = result.pxWidth / S.cal.calPxWidth;
+      // Update badge with current scale
+      const pct = Math.round(S.liveScale * 100);
+      dbDist.textContent = `${pct}% zoom`;
+      calSt.textContent = Math.round(result.pxPerCm) + 'px/cm';
+    }
+    // If ref not found, keep last known liveScale (don't reset)
+  }, 400);
 }
 
 function detectRect(type) {
   try {
-    const off = document.createElement('canvas'); off.width = 320; off.height = 240;
+    const W = 320, H = 240;
+    const off = document.createElement('canvas'); off.width = W; off.height = H;
     const oc = off.getContext('2d');
-    oc.drawImage(video, 0, 0, 320, 240);
-    const id = oc.getImageData(0, 0, 320, 240); const d = id.data;
+    oc.drawImage(video, 0, 0, W, H);
+    const id = oc.getImageData(0, 0, W, H); const d = id.data;
     let edges = [];
-    for (let y = 1; y < 239; y++) for (let x = 1; x < 319; x++) {
-      const i = (y * 320 + x) * 4;
-      const g = (d[i] + d[i+1] + d[i+2]) / 3;
-      const r = ((y * 320 + x + 1) * 4), dn = (((y+1) * 320 + x) * 4);
-      const gr = (d[r]+d[r+1]+d[r+2])/3, gd = (d[dn]+d[dn+1]+d[dn+2])/3;
-      if (Math.abs(g-gr) + Math.abs(g-gd) > 38) edges.push([x, y]);
+    for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++) {
+      const i = (y * W + x) * 4;
+      const g  = (d[i]   + d[i+1]   + d[i+2])   / 3;
+      const ir = (y * W + x + 1) * 4, idn = ((y+1) * W + x) * 4;
+      const gr = (d[ir]  + d[ir+1]  + d[ir+2])  / 3;
+      const gd = (d[idn] + d[idn+1] + d[idn+2]) / 3;
+      if (Math.abs(g-gr) + Math.abs(g-gd) > 36) edges.push([x, y]);
     }
-    if (edges.length < 80) return null;
-    const near = edges.filter(([x,y]) => Math.abs(x-160)<120 && Math.abs(y-120)<90);
-    if (near.length < 50) return null;
+    if (edges.length < 60) return null;
+    // Focus on centre region
+    const near = edges.filter(([x,y]) => Math.abs(x - W/2) < W*0.45 && Math.abs(y - H/2) < H*0.45);
+    if (near.length < 40) return null;
     const xs = near.map(e=>e[0]), ys = near.map(e=>e[1]);
     const rw = Math.max(...xs) - Math.min(...xs);
     const rh = Math.max(...ys) - Math.min(...ys);
     const ref = REF[type];
-    if (rh < 5) return null;
-    if (Math.abs((rw/rh) - (ref.w/ref.h)) / (ref.w/ref.h) > 0.45) return null;
-    const sw = rw * (window.innerWidth / 320);
-    return { pxPerCm: sw / ref.w };
+    if (rh < 4 || rw < 4) return null;
+    if (Math.abs((rw/rh) - (ref.w/ref.h)) / (ref.w/ref.h) > 0.5) return null;
+    // Scale detected rect back to screen pixels
+    const screenW = rw * (window.innerWidth / W);
+    return { pxWidth: screenW, pxPerCm: screenW / ref.w };
   } catch (e) { return null; }
 }
 
 function guestimate(type) {
-  // Assume object spans ~40% of screen width
-  const sw = window.innerWidth * 0.40;
-  return { pxPerCm: sw / REF[type].w, estimated: true };
+  const screenW = window.innerWidth * 0.40;
+  return { pxWidth: screenW, pxPerCm: screenW / REF[type].w, estimated: true };
 }
 
 function applyCalibration(pxPerCm, label, estimated) {
-  S.cal = { pxPerCm };
+  // Legacy path for manual cal
+  S.cal = { pxPerCm, calPxWidth: null, refType: null, focalPx: null };
+  S.liveScale = 1.0;
   calSt.textContent = (estimated ? '~' : '') + Math.round(pxPerCm) + 'px/cm';
-  const badge = estimated ? `~Cal via ${label}` : `Calibrated via ${label}`;
-  setStatus(badge + (estimated ? ' (hold closer for accuracy)' : ''), 'good');
+  setStatus(estimated ? `~Cal via ${label}` : `Calibrated via ${label}`, 'good');
   dbMode.textContent = 'Cal Mode';
   dbBadge.className = 'cal';
   dbBadge.style.display = 'block';
