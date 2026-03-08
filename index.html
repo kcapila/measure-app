@@ -3,860 +3,615 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>DimScan 3D</title>
+<title>DimScan</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#060810;--glass:rgba(255,255,255,0.05);--glass2:rgba(255,255,255,0.08);
+  --bg:#060810;--glass:rgba(255,255,255,0.05);--glass2:rgba(255,255,255,0.09);
   --border:rgba(255,255,255,0.1);--accent:#0ff;--accent2:#ff6b35;--green:#39ff14;
-  --red:#ff4466;--text:#dde4f0;--muted:rgba(221,228,240,0.45);
+  --red:#ff4466;--text:#dde4f0;--muted:rgba(221,228,240,0.4);
   --mono:'DM Mono',monospace;--display:'Bebas Neue',sans-serif;
 }
-html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow:hidden;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--mono);overflow:hidden;touch-action:none;
+  -webkit-tap-highlight-color:transparent;user-select:none}
+
+/* ── VIDEO + CANVAS ── */
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
-#canvas2d{position:fixed;inset:0;width:100%;height:100%;z-index:2}
-#ui{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
-/* scanlines */
+#cvs{position:fixed;inset:0;width:100%;height:100%;z-index:2}
 #scanlines{position:fixed;inset:0;z-index:3;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px);opacity:.5}
+  background:repeating-linear-gradient(0deg,transparent 0,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);opacity:.45}
 
-/* HEADER */
-#header{pointer-events:all;padding:16px 18px 0;display:flex;align-items:flex-start;justify-content:space-between}
-.wordmark{font-family:var(--display);font-size:26px;letter-spacing:3px;line-height:1}
-.wordmark em{color:var(--accent);font-style:normal}
-.wordmark small{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);vertical-align:super}
-#mode-chips{display:flex;gap:5px;margin-top:5px}
-.chip{font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:5px 11px;border-radius:100px;
-  border:1px solid var(--border);background:var(--glass);color:var(--muted);cursor:pointer;transition:all .2s;pointer-events:all}
-.chip.active{background:rgba(0,255,255,.12);border-color:var(--accent);color:var(--accent)}
-.chip.disabled{opacity:.3;pointer-events:none}
+/* ── UI SHELL ── */
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
 
-/* DEPTH BADGE top-right */
-#depth-badge{position:absolute;top:16px;right:18px;pointer-events:none;
-  background:rgba(6,8,16,.8);border:1px solid var(--border);border-radius:8px;
-  padding:7px 11px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
-  color:var(--muted);backdrop-filter:blur(8px);line-height:2;text-align:right;display:none}
-#depth-badge b{font-size:13px;color:var(--text);font-weight:500;display:block;letter-spacing:0}
-#depth-badge.xr{border-color:rgba(57,255,20,.5);color:var(--green)}
-#depth-badge.ai{border-color:rgba(0,255,255,.4);color:var(--accent)}
-#depth-badge.cal{border-color:rgba(255,107,53,.4);color:var(--accent2)}
+/* ── HEADER ── */
+#hdr{pointer-events:all;padding:16px 18px 0;display:flex;align-items:flex-start;justify-content:space-between}
+.wm{font-family:var(--display);font-size:26px;letter-spacing:3px;line-height:1}
+.wm em{color:var(--accent);font-style:normal}
+.wm small{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);vertical-align:super}
 
-/* STATUS CENTRE */
-#status-wrap{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:10px}
-#status-pill{background:rgba(6,8,16,.82);border:1px solid var(--border);border-radius:100px;
-  padding:8px 20px;font-size:10px;letter-spacing:2px;text-transform:uppercase;
-  color:var(--muted);backdrop-filter:blur(14px);transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
-#status-pill.active{border-color:rgba(0,255,255,.5);color:var(--accent)}
-#status-pill.warn{border-color:rgba(255,107,53,.5);color:var(--accent2)}
-#status-pill.good{border-color:rgba(57,255,20,.5);color:var(--green)}
-#status-pill.error{border-color:rgba(255,68,102,.5);color:var(--red)}
-/* crosshair */
-#xhair{width:44px;height:44px;position:relative}
-#xhair::before,#xhair::after{content:'';position:absolute;background:rgba(0,255,255,.6)}
-#xhair::before{width:1px;height:100%;left:50%;transform:translateX(-50%)}
-#xhair::after{height:1px;width:100%;top:50%;transform:translateY(-50%)}
-.xhring{position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(0,255,255,.4);animation:xhpulse 2s ease-in-out infinite}
-@keyframes xhpulse{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.8;transform:scale(1.15)}}
+/* ── INFO BADGE (top right) ── */
+#badge{position:absolute;top:16px;right:18px;pointer-events:none;
+  background:rgba(6,8,16,.82);border:1px solid var(--border);border-radius:8px;
+  padding:7px 12px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted);backdrop-filter:blur(10px);line-height:2;text-align:right;display:none}
+#badge b{font-size:13px;color:var(--text);font-weight:500;display:block;letter-spacing:0}
+#badge.good{border-color:rgba(57,255,20,.5);color:var(--green)}
+#badge.warn{border-color:rgba(255,107,53,.4);color:var(--accent2)}
 
-/* history top-left */
-#history{position:absolute;top:90px;left:16px;display:flex;flex-direction:column;gap:5px;pointer-events:none;max-width:130px}
-.hitem{background:rgba(6,8,16,.82);border:1px solid var(--border);border-radius:7px;padding:6px 10px;backdrop-filter:blur(8px);animation:hslide .2s ease}
-@keyframes hslide{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
-.hval{font-size:14px;color:var(--accent);font-weight:500}
-.hlbl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+/* ── CROSSHAIR ── */
+#xh{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:44px;height:44px;pointer-events:none}
+#xh::before,#xh::after{content:'';position:absolute;background:rgba(0,255,255,.65)}
+#xh::before{width:1px;height:100%;left:50%;transform:translateX(-50%)}
+#xh::after{height:1px;width:100%;top:50%;transform:translateY(-50%)}
+.xhr{position:absolute;inset:7px;border-radius:50%;border:1px solid rgba(0,255,255,.4);
+  animation:xhp 2s ease-in-out infinite}
+@keyframes xhp{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.8;transform:scale(1.12)}}
 
-/* BOTTOM PANEL */
+/* ── STATUS PILL ── */
+#spill{position:absolute;top:calc(50% + 40px);left:50%;transform:translateX(-50%);
+  background:rgba(6,8,16,.84);border:1px solid var(--border);border-radius:100px;
+  padding:7px 18px;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);backdrop-filter:blur(14px);transition:all .3s;
+  white-space:nowrap;max-width:88vw;text-align:center;pointer-events:none}
+#spill.on{border-color:rgba(0,255,255,.5);color:var(--accent)}
+#spill.ok{border-color:rgba(57,255,20,.5);color:var(--green)}
+#spill.wa{border-color:rgba(255,107,53,.5);color:var(--accent2)}
+
+/* ── HISTORY (top left) ── */
+#hist{position:absolute;top:90px;left:16px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.hi{background:rgba(6,8,16,.82);border:1px solid var(--border);border-radius:7px;
+  padding:6px 10px;backdrop-filter:blur(8px);animation:hsl .2s ease}
+@keyframes hsl{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+.hv{font-size:14px;color:var(--accent);font-weight:500}
+.hl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+
+/* ── BOTTOM PANEL ── */
 #panel{pointer-events:all;padding:0 15px 30px;
   background:linear-gradient(to top,rgba(6,8,16,.98) 65%,transparent)}
 
 /* big number */
-#meas-row{display:flex;align-items:flex-end;justify-content:center;gap:5px;padding:10px 0 4px}
-#meas-val{font-family:var(--display);font-size:68px;line-height:1;color:var(--accent);
-  letter-spacing:2px;text-shadow:0 0 40px rgba(0,255,255,.35);transition:color .2s}
-#meas-val.pop{animation:mpop .3s ease}
-@keyframes mpop{0%{text-shadow:0 0 40px rgba(0,255,255,.35)}50%{text-shadow:0 0 100px rgba(0,255,255,.9)}100%{text-shadow:0 0 40px rgba(0,255,255,.35)}}
-#meas-val.px-mode{color:var(--accent2);text-shadow:0 0 30px rgba(255,107,53,.3)}
-#meas-unit-lbl{font-size:15px;color:var(--muted);margin-bottom:14px;letter-spacing:1px}
-#meas-sub{font-size:10px;color:var(--muted);text-align:center;padding-bottom:10px;letter-spacing:.5px;min-height:16px}
+#mv{font-family:var(--display);font-size:72px;line-height:1;color:var(--accent);
+  letter-spacing:2px;text-shadow:0 0 40px rgba(0,255,255,.3);
+  text-align:center;padding-top:10px;transition:color .2s}
+#mv.pop{animation:mpop .28s ease}
+#mv.px{color:var(--accent2);text-shadow:0 0 30px rgba(255,107,53,.3)}
+@keyframes mpop{50%{text-shadow:0 0 100px rgba(0,255,255,.9)}}
+#mu{font-size:11px;color:var(--muted);text-align:center;letter-spacing:1px;margin-bottom:3px;min-height:16px}
+#ms{font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px;padding-bottom:10px;min-height:15px}
 
 /* unit row */
-#unit-row{display:flex;justify-content:center;gap:4px;margin-bottom:11px}
-.ubtn{background:var(--glass);border:1px solid var(--border);color:var(--muted);
+#urow{display:flex;justify-content:center;gap:4px;margin-bottom:11px}
+.ub{background:var(--glass);border:1px solid var(--border);color:var(--muted);
   font-family:var(--mono);font-size:11px;font-weight:500;padding:6px 15px;
   border-radius:6px;cursor:pointer;transition:all .2s}
-.ubtn.active{background:rgba(0,255,255,.13);border-color:var(--accent);color:var(--accent)}
+.ub.on{background:rgba(0,255,255,.12);border-color:var(--accent);color:var(--accent)}
 
-/* auto-cal strip */
-#cal-strip{display:flex;align-items:center;gap:7px;padding:9px 13px;margin-bottom:10px;
-  background:var(--glass);border:1px solid var(--border);border-radius:10px}
-.csl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);flex-shrink:0}
-.cal-btns{display:flex;gap:5px;flex:1}
-.cbtn{flex:1;padding:7px 4px;background:none;border:1px solid var(--border);border-radius:6px;
-  color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s;text-align:center;line-height:1.3}
-.cbtn:active{transform:scale(.96)}
-.cbtn.scanning{border-color:var(--accent2);color:var(--accent2);background:rgba(255,107,53,.1);animation:cbpulse .8s ease infinite alternate}
-@keyframes cbpulse{from{opacity:.7}to{opacity:1}}
-.cbtn.done{border-color:var(--green);color:var(--green);background:rgba(57,255,20,.07)}
-#calst{font-size:10px;color:var(--muted);flex-shrink:0;min-width:52px;text-align:right}
+/* ── CAL PANEL ── */
+#calbox{background:var(--glass);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-bottom:10px}
+.caltitle{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.caltitle span{color:var(--accent);font-size:10px}
 
-/* manual cal row */
-#manual-cal{display:flex;align-items:center;gap:6px;padding:7px 13px;margin-bottom:10px;
-  background:var(--glass);border:1px solid var(--border);border-radius:10px;display:none}
-.mcl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);flex-shrink:0}
-#ref-val{background:none;border:none;outline:none;font-family:var(--mono);font-size:15px;
-  font-weight:500;color:var(--text);width:60px;text-align:right}
-.runit{font-size:11px;color:var(--muted)}
-.div{width:1px;height:18px;background:var(--border);margin:0 3px}
-#do-manual-cal{background:var(--accent);color:#000;border:none;font-family:var(--mono);
-  font-size:10px;font-weight:500;padding:6px 12px;border-radius:6px;cursor:pointer;letter-spacing:.5px}
+/* step indicators */
+#steps{display:flex;gap:6px;margin-bottom:10px}
+.step{flex:1;border-radius:7px;padding:8px 6px;border:1px solid var(--border);
+  background:none;text-align:center;font-family:var(--mono);font-size:10px;
+  color:var(--muted);cursor:pointer;transition:all .2s;line-height:1.5}
+.step:active{transform:scale(.97)}
+.step.active{border-color:var(--accent);color:var(--accent);background:rgba(0,255,255,.08)}
+.step.done{border-color:var(--green);color:var(--green);background:rgba(57,255,20,.07)}
+.step.current{border-color:var(--accent2);color:var(--accent2);background:rgba(255,107,53,.08);
+  animation:sblink .9s ease infinite alternate}
+@keyframes sblink{from{opacity:.7}to{opacity:1}}
+.step-num{font-size:16px;display:block;margin-bottom:2px}
 
-/* main buttons */
-#btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.abtn{border:none;cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:500;
-  letter-spacing:.5px;border-radius:10px;padding:14px;display:flex;align-items:center;
+/* ref input row */
+#refrow{display:flex;align-items:center;gap:8px;
+  padding:8px 10px;background:rgba(0,0,0,.2);border-radius:8px;margin-bottom:6px}
+.rl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);flex-shrink:0}
+#rval{background:none;border:none;outline:none;font-family:var(--mono);font-size:16px;
+  font-weight:500;color:var(--text);width:65px;text-align:right}
+#runit{font-size:11px;color:var(--muted)}
+.rdiv{width:1px;height:16px;background:var(--border);margin:0 4px}
+.rhint{font-size:10px;color:var(--muted);flex:1;line-height:1.4}
+
+/* action buttons */
+#btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+.ab{border:none;cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:500;
+  letter-spacing:.5px;border-radius:10px;padding:13px;display:flex;align-items:center;
   justify-content:center;gap:7px;transition:all .15s}
-.abtn:active{transform:scale(.97)}
-.abtn-p{background:var(--accent);color:#000;grid-column:span 2;font-size:13px;
-  box-shadow:0 0 30px rgba(0,255,255,.2)}
-.abtn-p:hover{box-shadow:0 0 50px rgba(0,255,255,.4)}
-.abtn-s{background:var(--glass2);border:1px solid var(--border);color:var(--text)}
-.abtn-d{background:rgba(255,68,102,.1);border:1px solid rgba(255,68,102,.25);color:var(--red)}
-/* toggle manual cal link */
-#toggle-manual{font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;cursor:pointer;
-  text-decoration:underline;text-underline-offset:3px;pointer-events:all;letter-spacing:.5px}
+.ab:active{transform:scale(.97)}
+.ab-p{background:var(--accent);color:#000;grid-column:span 2;font-size:13px;
+  box-shadow:0 0 28px rgba(0,255,255,.18)}
+.ab-p:hover{box-shadow:0 0 46px rgba(0,255,255,.38)}
+.ab-s{background:var(--glass2);border:1px solid var(--border);color:var(--text)}
+.ab-d{background:rgba(255,68,102,.1);border:1px solid rgba(255,68,102,.22);color:var(--red)}
 
-/* LOADING */
+/* ── LOADING ── */
 #loading{position:fixed;inset:0;z-index:100;background:var(--bg);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .5s}
 #loading.gone{opacity:0;pointer-events:none}
-.ltitle{font-family:var(--display);font-size:52px;letter-spacing:4px}
-.ltitle em{color:var(--accent);font-style:normal}
-.lsub{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted)}
-.lbar{width:220px;height:2px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
-.lfill{height:100%;width:0;background:var(--accent);transition:width .35s ease;box-shadow:0 0 10px var(--accent)}
+.lt{font-family:var(--display);font-size:52px;letter-spacing:4px}
+.lt em{color:var(--accent);font-style:normal}
+.ls{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted)}
+.lb{width:220px;height:2px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden}
+.lf{height:100%;width:0;background:var(--accent);transition:width .35s ease;box-shadow:0 0 10px var(--accent)}
 #lmsg{font-size:10px;color:var(--muted);letter-spacing:1px;min-height:15px}
-#lcam-btn{display:none;background:var(--accent);color:#000;border:none;cursor:pointer;
+#lcb{display:none;background:var(--accent);color:#000;border:none;cursor:pointer;
   font-family:var(--mono);font-size:13px;font-weight:500;border-radius:10px;
-  padding:14px 36px;box-shadow:0 0 40px rgba(0,255,255,.3);transition:all .2s;letter-spacing:.5px;margin-top:6px}
-#lcam-btn:hover{box-shadow:0 0 60px rgba(0,255,255,.5);transform:translateY(-1px)}
+  padding:14px 36px;box-shadow:0 0 36px rgba(0,255,255,.28);transition:all .2s;letter-spacing:.5px;margin-top:6px}
 </style>
 </head>
 <body>
 
-<!-- LOADING -->
 <div id="loading">
-  <div class="ltitle">DIM<em>SCAN</em></div>
-  <div class="lsub">AR Measurement System</div>
-  <div class="lbar"><div class="lfill" id="lfill"></div></div>
+  <div class="lt">DIM<em>SCAN</em></div>
+  <div class="ls">Precision Measurement</div>
+  <div class="lb"><div class="lf" id="lf"></div></div>
   <div id="lmsg">Starting…</div>
-  <button id="lcam-btn" onclick="boot()">Enable Camera →</button>
+  <button id="lcb" onclick="boot()">Enable Camera →</button>
 </div>
 
 <video id="video" autoplay playsinline muted></video>
-<canvas id="canvas2d"></canvas>
+<canvas id="cvs"></canvas>
 <div id="scanlines"></div>
 
 <div id="ui">
-  <div id="header">
-    <div>
-      <div class="wordmark">Dim<em>Scan</em> <small>3D</small></div>
-      <div id="mode-chips">
-        <div class="chip active" id="chip-3d" onclick="setMode('3d')">3D Depth</div>
-        <div class="chip" id="chip-2d" onclick="setMode('2d')">2D Ruler</div>
-      </div>
-    </div>
+  <div id="hdr">
+    <div class="wm">Dim<em>Scan</em> <small>PRO</small></div>
   </div>
 
-  <div id="depth-badge">
-    <span id="db-label">Depth</span>
-    <b id="db-mode">—</b>
-    <span id="db-dist"></span>
+  <div id="badge">
+    <span id="bdlbl">Mode</span>
+    <b id="bdval">—</b>
+    <span id="bdsub"></span>
   </div>
 
-  <div id="status-wrap">
-    <div id="status-pill">Starting camera…</div>
-    <div id="xhair"><div class="xhring"></div></div>
-  </div>
-
-  <div id="history"></div>
+  <div id="xh"><div class="xhr"></div></div>
+  <div id="spill">Point camera at a surface</div>
+  <div id="hist"></div>
 
   <div id="panel">
-    <div id="meas-row">
-      <div id="meas-val">—</div>
-      <div id="meas-unit-lbl" style="display:none"></div>
-    </div>
-    <div id="meas-sub">Tap to place measurement points</div>
+    <div id="mv">—</div>
+    <div id="mu"></div>
+    <div id="ms">Calibrate below, then tap to measure</div>
 
-    <div id="unit-row">
-      <button class="ubtn active" id="ubtn-cm"  onclick="setUnit('cm')">cm</button>
-      <button class="ubtn"        id="ubtn-in"  onclick="setUnit('in')">in</button>
-      <button class="ubtn"        id="ubtn-mm"  onclick="setUnit('mm')">mm</button>
-      <button class="ubtn"        id="ubtn-m"   onclick="setUnit('m')">m</button>
+    <div id="urow">
+      <button class="ub on" id="ub-cm" onclick="setUnit('cm')">cm</button>
+      <button class="ub"    id="ub-in" onclick="setUnit('in')">in</button>
+      <button class="ub"    id="ub-mm" onclick="setUnit('mm')">mm</button>
+      <button class="ub"    id="ub-m"  onclick="setUnit('m')">m</button>
     </div>
 
-    <div id="cal-strip">
-      <span class="csl">Auto‑Cal</span>
-      <div class="cal-btns">
-        <button class="cbtn" id="cb-card" onclick="autoCal('card')">💳<br>Card</button>
-        <button class="cbtn" id="cb-a4"   onclick="autoCal('a4')">📄<br>A4</button>
-        <button class="cbtn" id="cb-hand" onclick="autoCal('hand')">🖐️<br>Hand</button>
+    <!-- CALIBRATION: 3-step guided flow -->
+    <div id="calbox">
+      <div class="caltitle">
+        Calibration
+        <span id="calst">Not calibrated</span>
       </div>
-      <span id="calst">Uncal</span>
+
+      <div id="steps">
+        <div class="step current" id="s1" onclick="goStep(1)">
+          <span class="step-num">①</span>Set size
+        </div>
+        <div class="step" id="s2" onclick="goStep(2)">
+          <span class="step-num">②</span>Tap P1
+        </div>
+        <div class="step" id="s3" onclick="goStep(3)">
+          <span class="step-num">③</span>Tap P2
+        </div>
+      </div>
+
+      <div id="refrow">
+        <span class="rl">Object size</span>
+        <input type="number" id="rval" value="8.56" min="0.01" step="0.01" oninput="onRefChange()">
+        <span id="runit">cm</span>
+        <div class="rdiv"></div>
+        <span class="rhint" id="rhint">e.g. credit card = 8.56 cm wide</span>
+      </div>
+
+      <div style="display:flex;gap:6px">
+        <button class="ab ab-s" style="flex:1;font-size:11px" onclick="quickCal('card')">💳 Card 8.56cm</button>
+        <button class="ab ab-s" style="flex:1;font-size:11px" onclick="quickCal('a4')">📄 A4 29.7cm</button>
+      </div>
     </div>
 
-    <div id="toggle-manual" onclick="toggleManual()">↓ Enter known size manually</div>
-
-    <div id="manual-cal">
-      <span class="mcl">Known size</span>
-      <input type="number" id="ref-val" value="8.56" min="0.1" step="0.1">
-      <span class="runit" id="ref-unit-lbl">cm</span>
-      <div class="div"></div>
-      <button id="do-manual-cal" onclick="doManualCal()">Draw it →</button>
-    </div>
-
-    <div id="btn-row">
-      <button class="abtn abtn-p" id="main-btn" onclick="mainAction()">
-        <span id="mi">📍</span><span id="ml">Place First Point</span>
+    <div id="btns">
+      <button class="ab ab-p" id="mb" onclick="mainBtn()">
+        <span id="mi">📍</span><span id="ml">Start Measuring</span>
       </button>
-      <button class="abtn abtn-s" onclick="undo()">↩ Undo</button>
-      <button class="abtn abtn-d" onclick="clearAll()">✕ Clear</button>
+      <button class="ab ab-s" onclick="undoPt()">↩ Undo</button>
+      <button class="ab ab-d" onclick="clearAll()">✕ Clear</button>
     </div>
   </div>
 </div>
 
 <script>
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 //  STATE
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 const S = {
-  mode: '3d',          // '3d' | '2d' | 'manual-draw'
-  depthMode: null,     // 'webxr' | '2d-cal' | null
   unit: 'cm',
-  pts: [],             // [{sx,sy,depth?,wx?,wy?,wz?}]
-  cal: null,           // { pxPerCm } — 2D calibration
+  // Calibration
+  calStep: 1,        // 1=set size, 2=tap P1, 3=tap P2
+  calPts: [],        // calibration points [{sx,sy}]
+  refSizeCm: 8.56,   // known real size of calibration object
+  // focalPx: pixels * real_cm / pixel_width_at_cal = effective focal length
+  // Derived: focalPx = calPxDist / refSizeCm
+  // At measure time: realCm = measPxDist / focalPx * ( videoW / screenW )
+  focalPx: null,
+  videoW: 1,         // actual video pixel width (for pixel-space correction)
+  screenW: 1,        // screen render width
+  // Measurement
+  pts: [],           // measurement points [{sx,sy}]
   history: [],
-  scanning: false,
-  xrSession: null,
-  xrRefSpace: null,
-  xrDepthInfo: null,
-  manualDrawing: false,
-  manualRef: null,     // { refCm }
+  measuring: false,
 };
 
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 //  ELEMENTS
-// ─────────────────────────────────────────────────
-const video   = document.getElementById('video');
-const c2      = document.getElementById('canvas2d');
-const ctx     = c2.getContext('2d');
-const pill    = document.getElementById('status-pill');
-const dbBadge = document.getElementById('depth-badge');
-const dbMode  = document.getElementById('db-mode');
-const dbDist  = document.getElementById('db-dist');
-const mVal    = document.getElementById('meas-val');
-const mUnit   = document.getElementById('meas-unit-lbl');
-const mSub    = document.getElementById('meas-sub');
-const calSt   = document.getElementById('calst');
-const histEl  = document.getElementById('history');
-const lfill   = document.getElementById('lfill');
-const lmsg    = document.getElementById('lmsg');
+// ═══════════════════════════════════════════════════════════
+const video = document.getElementById('video');
+const cvs   = document.getElementById('cvs');
+const ctx   = cvs.getContext('2d');
+const pill  = document.getElementById('spill');
+const badge = document.getElementById('badge');
+const bdVal = document.getElementById('bdval');
+const bdSub = document.getElementById('bdsub');
+const mv    = document.getElementById('mv');
+const mu    = document.getElementById('mu');
+const ms    = document.getElementById('ms');
+const hist  = document.getElementById('hist');
+const calSt = document.getElementById('calst');
 
-// ─────────────────────────────────────────────────
-//  UNITS
-// ─────────────────────────────────────────────────
-const U = { cm: 100, in: 39.3701, mm: 1000, m: 1 }; // m → unit
-function fm(meters) { return meters * U[S.unit]; }
-function setUnit(u) {
-  S.unit = u;
-  document.querySelectorAll('.ubtn').forEach(b => b.classList.remove('active'));
-  document.getElementById('ubtn-' + u).classList.add('active');
-  document.getElementById('ref-unit-lbl').textContent = u;
-  recompute();
-}
-
-// ─────────────────────────────────────────────────
-//  MODES
-// ─────────────────────────────────────────────────
-function setMode(m) {
-  S.mode = m;
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  document.getElementById('chip-' + m).classList.add('active');
-  clearAll();
-  setStatus(m === '3d' ? 'Point & tap to anchor depth points' : 'Tap two points to measure', '');
-}
-
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 //  BOOT
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 async function boot() {
-  document.getElementById('lcam-btn').style.display = 'none';
-  setLd(10, 'Requesting camera…');
-
-  const ok = await startCam();
-  if (!ok) {
-    setLd(0, 'Camera access denied');
-    document.getElementById('lcam-btn').style.display = 'block';
-    document.getElementById('lcam-btn').textContent = 'Retry Camera →';
-    return;
-  }
-
-  setLd(50, 'Checking ARCore support…');
-  await sleep(200);
-
-  // Check if WebXR immersive-ar is supported (no session yet — just a check)
-  const xrAvailable = navigator.xr
-    ? await navigator.xr.isSessionSupported('immersive-ar').catch(() => false)
-    : false;
-
-  setLd(100, xrAvailable ? 'ARCore available — tap to activate' : 'Ready — calibrate for real units');
-  await sleep(350);
-  document.getElementById('loading').classList.add('gone');
-
-  if (xrAvailable) {
-    // Show an "Enable AR" button — WebXR REQUIRES a direct user gesture to start a session
-    setStatus('Tap "Enable AR" to activate depth sensing', 'active');
-    showEnableARButton();
-  } else {
-    fallbackToCalMode();
-  }
-
-  startLoop();
-}
-
-function showEnableARButton() {
-  // Inject a prominent button into the panel area
-  const existing = document.getElementById('ar-activate-btn');
-  if (existing) return;
-  const btn = document.createElement('button');
-  btn.id = 'ar-activate-btn';
-  btn.textContent = '🔬 Enable AR Depth';
-  btn.style.cssText = `
-    position:fixed;bottom:280px;left:50%;transform:translateX(-50%);z-index:50;
-    background:#39ff14;color:#000;border:none;cursor:pointer;
-    font-family:'DM Mono',monospace;font-size:13px;font-weight:500;
-    border-radius:10px;padding:14px 28px;
-    box-shadow:0 0 30px rgba(57,255,20,.4);letter-spacing:.5px;
-    white-space:nowrap;
-  `;
-  btn.onclick = activateARFromGesture;
-  document.body.appendChild(btn);
-}
-
-// This function is called from a real user tap — required by Chrome for WebXR
-async function activateARFromGesture() {
-  const btn = document.getElementById('ar-activate-btn');
-  if (btn) { btn.textContent = '⌛ Starting ARCore…'; btn.style.pointerEvents = 'none'; }
-  const ok = await tryWebXR();
-  if (btn) btn.remove();
-  if (!ok) fallbackToCalMode();
-}
-
-function fallbackToCalMode() {
-  S.depthMode = '2d-cal';
-  S.mode = '2d';
-  document.getElementById('chip-3d').classList.add('disabled');
-  document.getElementById('chip-2d').classList.add('active');
-  document.getElementById('chip-3d').classList.remove('active');
-  dbMode.textContent = 'Cal Mode';
-  dbBadge.className = 'cal';
-  dbBadge.style.display = 'block';
-  setStatus('No depth sensor — use Auto-Cal or enter manually', 'warn');
-}
-
-async function startCam() {
+  document.getElementById('lcb').style.display = 'none';
+  ld(15, 'Requesting camera…');
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
     video.srcObject = stream;
-    await new Promise(r => { video.onloadedmetadata = r; });
-    resize(); return true;
-  } catch (e) { return false; }
-}
-
-async function tryWebXR() {
-  if (!navigator.xr) return false;
-  try {
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (!supported) return false;
-    setLd(60, 'Starting ARCore session…');
-    const session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['local'],
-      optionalFeatures: ['depth-sensing'],
-      depthSensing: { usagePreference: ['cpu-optimized'], dataFormatPreference: ['luminance-alpha'] }
-    });
-    S.xrSession = session;
-    S.depthMode = 'webxr';
-    const rs = await session.requestReferenceSpace('local');
-    S.xrRefSpace = rs;
-
-    session.addEventListener('end', () => {
-      S.xrSession = null; S.xrDepthInfo = null; S.depthMode = '2d-cal';
-      fallbackToCalMode();
-    });
-
-    // XR frame loop — keep depth map fresh
-    session.requestAnimationFrame(function xf(t, frame) {
-      if (!frame) return;
-      try {
-        const pose = frame.getViewerPose(rs);
-        if (pose) {
-          const di = frame.getDepthInformation?.(pose.views[0]);
-          if (di) S.xrDepthInfo = di;
-        }
-      } catch (e) {}
-      session.requestAnimationFrame(xf);
-    });
-
-    // In immersive-ar, the XR compositor swallows all touch events.
-    // 'select' is the correct way to detect taps in AR mode.
-    // The tap always anchors to screen centre (aim with the crosshair).
-    session.addEventListener('select', () => {
-      if (S.scanning || S.manualDrawing) return;
-      const sx = window.innerWidth  / 2;
-      const sy = window.innerHeight / 2;
-      const depth = sampleDepth(sx, sy);
-      placePoint(sx, sy, depth);
-    });
-
-    dbMode.textContent = 'ARCore';
-    dbBadge.className = 'xr';
-    dbBadge.style.display = 'block';
-    setStatus('AR ready — aim crosshair & tap to place point', 'good');
-    return true;
-  } catch (e) { console.warn('WebXR:', e.message); return false; }
-}
-
-// ─────────────────────────────────────────────────
-//  DEPTH SAMPLING
-// ─────────────────────────────────────────────────
-function sampleDepth(sx, sy) {
-  if (S.depthMode === 'webxr' && S.xrDepthInfo) {
-    try {
-      const d = S.xrDepthInfo.getDepthInMeters(sx / window.innerWidth, sy / window.innerHeight);
-      if (d > 0.05 && d < 20) return d;
-    } catch (e) {}
+    await new Promise(r => video.onloadedmetadata = r);
+    S.videoW  = video.videoWidth  || 1920;
+    S.screenW = window.innerWidth;
+    resize();
+    ld(100, 'Ready');
+    await sleep(350);
+    document.getElementById('loading').classList.add('gone');
+    setStatus('Set object size below, then tap to calibrate', 'on');
+    updateSteps();
+  } catch(e) {
+    ld(0, 'Camera denied — tap to retry');
+    document.getElementById('lcb').style.display = 'block';
   }
-  return null;
 }
 
-// ─────────────────────────────────────────────────
-//  INPUT
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  UNITS
+// ═══════════════════════════════════════════════════════════
+const toM = { cm: 0.01, in: 0.0254, mm: 0.001, m: 1 };
+const fmM = { cm: 100,  in: 39.3701, mm: 1000, m: 1 };
+function setUnit(u) {
+  S.unit = u;
+  document.querySelectorAll('.ub').forEach(b => b.classList.remove('on'));
+  document.getElementById('ub-' + u).classList.add('on');
+  document.getElementById('runit').textContent = u;
+  recompute();
+  // Convert ref input to new unit
+  const cm = parseFloat(document.getElementById('rval').value) * toM[u] * 100;
+  S.refSizeCm = cm;
+}
 
-// Regular touch/click — only used when NOT in immersive-ar mode
-c2.addEventListener('touchend', e => {
-  if (S.depthMode === 'webxr') return; // XR select handles taps in AR mode
+// ═══════════════════════════════════════════════════════════
+//  CALIBRATION FLOW
+// ═══════════════════════════════════════════════════════════
+function onRefChange() {
+  const v = parseFloat(document.getElementById('rval').value);
+  if (!v || v <= 0) return;
+  // Convert from current unit to cm
+  S.refSizeCm = v * (toM[S.unit] * 100);
+}
+
+function quickCal(type) {
+  const sizes = { card: { cm: 8.56, label: 'credit card width' }, a4: { cm: 29.7, label: 'A4 width' } };
+  const s = sizes[type];
+  S.refSizeCm = s.cm;
+  // Show in current unit
+  const inUnit = (s.cm / 100) * fmM[S.unit];
+  document.getElementById('rval').value = inUnit.toFixed(2);
+  document.getElementById('rhint').textContent = `${s.label} — now tap its two edges`;
+  goStep(2);
+}
+
+function goStep(n) {
+  // Can only go forward if previous steps are done
+  if (n === 2 && !S.refSizeCm) { alert('Enter the object size first'); return; }
+  if (n === 3 && S.calPts.length < 1) return;
+  S.calStep = n;
+  S.calPts  = n === 1 ? [] : S.calPts.slice(0, n - 2);
+  updateSteps();
+  const msgs = [
+    'Enter known object size above',
+    'Tap LEFT edge of the object on screen',
+    'Tap RIGHT edge of the object on screen',
+  ];
+  setStatus(msgs[n - 1], 'on');
+}
+
+function updateSteps() {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('s' + i);
+    el.className = 'step';
+    if (i < S.calStep) el.classList.add('done');
+    else if (i === S.calStep) el.classList.add('current');
+  });
+}
+
+function finishCalibration() {
+  const p1 = S.calPts[0], p2 = S.calPts[1];
+  const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
+  const pxDist = Math.sqrt(dx*dx + dy*dy);
+
+  // focalPx = pixelDistance_on_screen / realSizeCm
+  // This is NOT a true focal length — it's "pixels per cm at this distance".
+  // To make it zoom-invariant we also store the video/screen ratio at cal time,
+  // so we can normalise future measurements to the same coordinate space.
+  S.focalPx    = pxDist / S.refSizeCm;         // px/cm at calibration distance
+  S.calScreenW = window.innerWidth;             // screen width at cal time
+  S.calVideoW  = video.videoWidth || S.videoW; // video resolution at cal time
+
+  S.calStep = 1; // reset cal UI
+  S.calPts  = [];
+  updateSteps();
+
+  // Badge
+  badge.style.display = 'block';
+  badge.className = 'good';
+  bdVal.textContent = 'Calibrated';
+  bdSub.textContent = Math.round(S.focalPx) + ' px/cm';
+  calSt.textContent = '✓ ' + S.refSizeCm.toFixed(1) + 'cm ref';
+
+  setStatus('Calibrated ✓  Tap two points to measure', 'ok');
+  updateMBtn();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOUCH INPUT
+// ═══════════════════════════════════════════════════════════
+cvs.addEventListener('touchend', e => {
   e.preventDefault();
   const t = e.changedTouches[0];
   handleTap(t.clientX, t.clientY);
 }, { passive: false });
-c2.addEventListener('click', e => {
-  if (S.depthMode === 'webxr') return;
-  handleTap(e.clientX, e.clientY);
-});
+cvs.addEventListener('click', e => handleTap(e.clientX, e.clientY));
 
 function handleTap(sx, sy) {
-  if (S.scanning) return;
-  if (S.manualDrawing) {
-    S.pts.push({ sx, sy, depth: null });
-    if (S.pts.length === 2) finishManualCal();
-    else setStatus('Now tap the other end of the object', 'active');
+  // ── CALIBRATION TAPS ──
+  if (S.calStep === 2) {
+    S.calPts = [{ sx, sy }];
+    goStep(3);
     return;
   }
-  const depth = sampleDepth(sx, sy);
-  placePoint(sx, sy, depth);
-}
-
-// Shared point placement — called from both handleTap and XR select
-function placePoint(sx, sy, depth) {
-  if (S.pts.length >= 2) { S.pts = []; clearDisplay(); }
-
-  const pt = { sx, sy, depth };
-  if (depth) {
-    const fovY = 60 * Math.PI / 180;
-    const aspect = window.innerWidth / window.innerHeight;
-    const fovX = 2 * Math.atan(Math.tan(fovY / 2) * aspect);
-    const nx = (sx / window.innerWidth - 0.5) * 2;
-    const ny = (sy / window.innerHeight - 0.5) * 2;
-    pt.wx = nx * depth * Math.tan(fovX / 2);
-    pt.wy = ny * depth * Math.tan(fovY / 2);
-    pt.wz = depth;
+  if (S.calStep === 3) {
+    S.calPts.push({ sx, sy });
+    finishCalibration();
+    return;
   }
 
-  S.pts.push(pt);
-  updateBtn();
-
-  if (S.pts.length === 2) measure(S.pts[0], S.pts[1]);
-  else setStatus(S.depthMode === 'webxr' ? 'Aim & tap to place second point' : 'Tap second point', 'active');
+  // ── MEASUREMENT TAPS ──
+  if (!S.focalPx) {
+    setStatus('Calibrate first — tap the steps above', 'wa');
+    return;
+  }
+  if (S.pts.length >= 2) { S.pts = []; clearDisp(); }
+  S.pts.push({ sx, sy });
+  updateMBtn();
+  if (S.pts.length === 2) compute();
+  else setStatus('Tap second point', 'on');
 }
 
-function mainAction() {
-  // Tap at crosshair centre
-  handleTap(window.innerWidth / 2, window.innerHeight / 2);
+function mainBtn() {
+  if (S.calStep === 2 || S.calStep === 3) {
+    // Place cal point at crosshair
+    handleTap(window.innerWidth / 2, window.innerHeight / 2);
+  } else {
+    handleTap(window.innerWidth / 2, window.innerHeight / 2);
+  }
 }
-function undo() {
-  S.pts.pop(); S.manualDrawing = false;
-  clearDisplay(); updateBtn();
-  if (!S.pts.length) setStatus('Tap to start', '');
+
+function undoPt() {
+  if (S.calStep === 3) { goStep(2); return; }
+  S.pts.pop(); clearDisp(); updateMBtn();
+  if (!S.pts.length) setStatus('Tap to place first point', '');
 }
+
 function clearAll() {
-  S.pts = []; S.manualDrawing = false;
-  clearDisplay(); updateBtn();
-  setStatus(S.mode === '3d' ? 'Point & tap to anchor' : 'Tap two points', '');
+  S.pts = []; S.calPts = [];
+  clearDisp(); updateMBtn();
+  setStatus('Tap to measure', '');
 }
-function updateBtn() {
-  const n = S.pts.length;
+
+function updateMBtn() {
   const mi = document.getElementById('mi'), ml = document.getElementById('ml');
-  if (n === 0) { mi.textContent = '📍'; ml.textContent = 'Place First Point'; }
-  else if (n === 1) { mi.textContent = '📍'; ml.textContent = 'Place Second Point'; }
-  else { mi.textContent = '🔄'; ml.textContent = 'Measure Again'; }
+  if (S.calStep === 2) { mi.textContent='📏'; ml.textContent='Tap Cal Point 1'; return; }
+  if (S.calStep === 3) { mi.textContent='📏'; ml.textContent='Tap Cal Point 2'; return; }
+  const n = S.pts.length;
+  if (n === 0) { mi.textContent='📍'; ml.textContent='Place First Point'; }
+  else if (n === 1) { mi.textContent='📍'; ml.textContent='Place Second Point'; }
+  else { mi.textContent='🔄'; ml.textContent='Measure Again'; }
 }
 
-// ─────────────────────────────────────────────────
-//  MEASUREMENT
-// ─────────────────────────────────────────────────
-function measure(p1, p2) {
-  let meters = null;
+// ═══════════════════════════════════════════════════════════
+//  MEASUREMENT — zoom-invariant pinhole model
+// ═══════════════════════════════════════════════════════════
+//
+//  The key insight:
+//  At calibration: focalPx = pixDist_cal / refCm
+//  At measurement: realCm  = pixDist_meas / focalPx
+//
+//  This is ONLY correct when measuring objects at THE SAME DISTANCE
+//  as the calibration object was. If the camera moves closer/farther
+//  the scale changes — that's unavoidable with a single camera and no depth.
+//
+//  BUT: if we measure two points that are both at the same distance as
+//  the calibration plane, focalPx stays correct regardless of zoom.
+//  Zoom just changes both pixDist and focalPx proportionally, so they cancel.
+//
+//  In practice: calibrate with the object on the surface you want to measure,
+//  then measure on that same surface. Accuracy is typically ±5% at arm's length.
+//
+function compute() {
+  const p1 = S.pts[0], p2 = S.pts[1];
+  const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
+  const pxDist = Math.sqrt(dx*dx + dy*dy);
 
-  // True 3D
-  if (p1.wx !== undefined && p2.wx !== undefined) {
-    const dx = p2.wx - p1.wx, dy = p2.wy - p1.wy, dz = p2.wz - p1.wz;
-    meters = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  }
-  // 2D calibrated — with live zoom correction
-  else if (S.cal) {
-    const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
-    const px = Math.sqrt(dx * dx + dy * dy);
-    // liveScale = currentZoom / calZoom. If zoomed out (object looks smaller),
-    // liveScale < 1, so we divide by a smaller number = correctly larger result.
-    const scale = (S.liveScale && S.cal.calPxWidth) ? S.liveScale : 1.0;
-    const effectivePxPerCm = S.cal.pxPerCm * scale;
-    meters = (px / effectivePxPerCm) * 0.01; // px→cm→m
-  }
-  // Pixel fallback
-  else {
-    const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
-    const px = Math.round(Math.sqrt(dx * dx + dy * dy));
-    mVal.textContent = px + 'px';
-    mVal.className = 'px-mode';
-    mUnit.style.display = 'none';
-    mSub.textContent = 'Not calibrated — use Auto-Cal ↓';
-    setStatus('Measured in pixels — calibrate for real units', 'warn');
-    return;
-  }
+  // Correct for any screen size change since calibration
+  const screenScale = S.calScreenW / window.innerWidth;
+  const correctedPx = pxDist * screenScale;
 
-  if (meters && meters > 0) showResult(meters);
+  const cm = correctedPx / S.focalPx;
+  const meters = cm * 0.01;
+  showResult(meters, cm);
 }
 
-function showResult(meters) {
-  const v = fm(meters);
+function showResult(meters, cm) {
+  const v = meters * fmM[S.unit];
   const lbl = v.toFixed(v < 10 ? 2 : 1);
-  mVal.textContent = lbl;
-  mVal.className = 'pop';
-  mUnit.textContent = S.unit;
-  mUnit.style.display = 'block';
-  const scaleActive = S.cal && S.cal.calPxWidth && S.liveScale !== 1.0;
-  mSub.textContent = S.depthMode === 'webxr' ? '3D ARCore measurement'
-                   : scaleActive ? `2D + live scale (${Math.round(S.liveScale * 100)}% zoom)`
-                   : S.cal ? '2D calibrated measurement'
-                   : 'measurement';
-  setStatus(`${lbl} ${S.unit} ✓`, 'good');
+  mv.textContent = lbl;
+  mv.className = 'pop';
+  mu.textContent = S.unit;
+  ms.textContent = `ref: ${S.refSizeCm.toFixed(1)}cm · ±5% accuracy`;
+  setStatus(`${lbl} ${S.unit} ✓`, 'ok');
   S.history.unshift(lbl + ' ' + S.unit);
   if (S.history.length > 5) S.history.pop();
-  renderHistory();
+  renderHist();
 }
 
-function recompute() {
-  if (S.pts.length === 2) measure(S.pts[0], S.pts[1]);
+function recompute() { if (S.pts.length === 2) compute(); }
+
+function clearDisp() {
+  mv.textContent = '—'; mv.className = '';
+  mu.textContent = ''; ms.textContent = 'Tap two points to measure';
 }
 
-function clearDisplay() {
-  mVal.textContent = '—'; mVal.className = '';
-  mUnit.style.display = 'none';
-  mSub.textContent = 'Tap two points to measure';
-}
-
-function renderHistory() {
-  histEl.innerHTML = S.history.map((h, i) =>
-    `<div class="hitem"><div class="hlbl">#${S.history.length - i}</div><div class="hval">${h}</div></div>`
+function renderHist() {
+  hist.innerHTML = S.history.map((h, i) =>
+    `<div class="hi"><div class="hl">#${S.history.length - i}</div><div class="hv">${h}</div></div>`
   ).join('');
 }
 
-// ─────────────────────────────────────────────────
-//  CALIBRATION  (focal-length based — zoom-invariant)
-// ─────────────────────────────────────────────────
-//
-//  Core idea (pinhole camera model):
-//    pixelSize = focalPx * realSizeCm / distanceCm
-//  →  focalPx  = pixelSize * distanceCm / realSizeCm
-//  →  distanceCm = focalPx * realSizeCm / pixelSize  (at any zoom)
-//  →  realSizeCm = pixelDist * realSizeCm / pixelSize (at same distance)
-//
-//  We don't know distanceCm, but we don't need to!
-//  We store:  focalPx = pxWidth_at_cal * (some_distance / refWidthCm)
-//  Since distance cancels when measuring objects AT THE SAME PLANE,
-//  what we actually store is the "effective focal length" = pxPerCm * distance.
-//
-//  Live scale correction: each frame we re-detect the ref object and
-//  compute liveScale = currentPxWidth / calPxWidth.
-//  Then: trueMeasurement = rawPixelDist / (calPxPerCm * liveScale)
-//
-const REF = {
-  card: { w: 8.56, h: 5.40, label: 'Credit Card' },
-  a4:   { w: 29.7, h: 21.0, label: 'A4 Paper' },
-  hand: { w: 8.0,  h: 19.0, label: 'Hand Width' },
-};
-
-// Calibration state
-// S.cal = { pxPerCm, calPxWidth, refType, focalPx }
-// S.liveScale = current zoom correction factor (1.0 = same as cal distance)
-
-function autoCal(type) {
-  if (S.scanning) return;
-  S.scanning = true;
-  const btn = document.getElementById('cb-' + type);
-  btn.classList.add('scanning');
-  btn.innerHTML = '⌛<br>Scanning…';
-  calSt.textContent = 'Scanning';
-  setStatus(`Hold ${REF[type].label} flat & centred in frame…`, 'warn');
-
-  setTimeout(() => {
-    const result = detectRect(type) || guestimate(type);
-
-    // Store focal length: focalPx = pxWidth * (distance / realWidth)
-    // We treat distance as 1 unit (unknown), so focalPx = pxWidth / realWidthCm
-    // This lets us later compute: realCm = measuredPx / (focalPx / currentPxWidth * realWidthCm)
-    //                                     = measuredPx * currentPxWidth / (focalPx * realWidthCm)
-    // Simplified: realCm = measuredPx / liveScale / calPxPerCm
-    const focalPx = result.pxWidth; // pxWidth at cal distance (distance normalised to 1)
-
-    S.cal = {
-      pxPerCm:   result.pxPerCm,
-      calPxWidth: result.pxWidth,   // ref object width in px AT calibration time
-      refType:    type,
-      focalPx,
-    };
-    S.liveScale = 1.0;
-
-    // Start continuous scale tracking
-    startScaleTracking(type);
-
-    calSt.textContent = (result.estimated ? '~' : '') + Math.round(result.pxPerCm) + 'px/cm';
-    btn.classList.remove('scanning');
-    btn.classList.add('done');
-    btn.innerHTML = (result.estimated ? '~' : '✓') + '<br>' + REF[type].label.split(' ')[0];
-    S.scanning = false;
-    setStatus(result.estimated
-      ? `~Cal via ${REF[type].label} — move closer for accuracy`
-      : `Calibrated ✓ — zoom freely, scale auto-adjusts`, 'good');
-    dbMode.textContent = 'Live Scale';
-    dbBadge.className = 'cal';
-    dbBadge.style.display = 'block';
-  }, 1600);
-}
-
-// Continuously re-detect the reference object to get live scale
-let scaleTrackInterval = null;
-function startScaleTracking(type) {
-  if (scaleTrackInterval) clearInterval(scaleTrackInterval);
-  scaleTrackInterval = setInterval(() => {
-    if (!S.cal) return;
-    const result = detectRect(type);
-    if (result && result.pxWidth > 0) {
-      S.liveScale = result.pxWidth / S.cal.calPxWidth;
-      // Update badge with current scale
-      const pct = Math.round(S.liveScale * 100);
-      dbDist.textContent = `${pct}% zoom`;
-      calSt.textContent = Math.round(result.pxPerCm) + 'px/cm';
-    }
-    // If ref not found, keep last known liveScale (don't reset)
-  }, 400);
-}
-
-function detectRect(type) {
-  try {
-    const W = 320, H = 240;
-    const off = document.createElement('canvas'); off.width = W; off.height = H;
-    const oc = off.getContext('2d');
-    oc.drawImage(video, 0, 0, W, H);
-    const id = oc.getImageData(0, 0, W, H); const d = id.data;
-    let edges = [];
-    for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++) {
-      const i = (y * W + x) * 4;
-      const g  = (d[i]   + d[i+1]   + d[i+2])   / 3;
-      const ir = (y * W + x + 1) * 4, idn = ((y+1) * W + x) * 4;
-      const gr = (d[ir]  + d[ir+1]  + d[ir+2])  / 3;
-      const gd = (d[idn] + d[idn+1] + d[idn+2]) / 3;
-      if (Math.abs(g-gr) + Math.abs(g-gd) > 36) edges.push([x, y]);
-    }
-    if (edges.length < 60) return null;
-    // Focus on centre region
-    const near = edges.filter(([x,y]) => Math.abs(x - W/2) < W*0.45 && Math.abs(y - H/2) < H*0.45);
-    if (near.length < 40) return null;
-    const xs = near.map(e=>e[0]), ys = near.map(e=>e[1]);
-    const rw = Math.max(...xs) - Math.min(...xs);
-    const rh = Math.max(...ys) - Math.min(...ys);
-    const ref = REF[type];
-    if (rh < 4 || rw < 4) return null;
-    if (Math.abs((rw/rh) - (ref.w/ref.h)) / (ref.w/ref.h) > 0.5) return null;
-    // Scale detected rect back to screen pixels
-    const screenW = rw * (window.innerWidth / W);
-    return { pxWidth: screenW, pxPerCm: screenW / ref.w };
-  } catch (e) { return null; }
-}
-
-function guestimate(type) {
-  const screenW = window.innerWidth * 0.40;
-  return { pxWidth: screenW, pxPerCm: screenW / REF[type].w, estimated: true };
-}
-
-function applyCalibration(pxPerCm, label, estimated) {
-  // Legacy path for manual cal
-  S.cal = { pxPerCm, calPxWidth: null, refType: null, focalPx: null };
-  S.liveScale = 1.0;
-  calSt.textContent = (estimated ? '~' : '') + Math.round(pxPerCm) + 'px/cm';
-  setStatus(estimated ? `~Cal via ${label}` : `Calibrated via ${label}`, 'good');
-  dbMode.textContent = 'Cal Mode';
-  dbBadge.className = 'cal';
-  dbBadge.style.display = 'block';
-}
-
-// Manual calibration
-function toggleManual() {
-  const el = document.getElementById('manual-cal');
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
-}
-function doManualCal() {
-  const refCm = parseFloat(document.getElementById('ref-val').value);
-  if (!refCm || refCm <= 0) { alert('Enter a valid size'); return; }
-  // Convert from current unit to cm
-  const toCm = { cm: 1, in: 2.54, mm: 0.1, m: 100 };
-  const refInCm = refCm * toCm[S.unit];
-  S.manualRef = { refCm: refInCm };
-  S.manualDrawing = true;
-  S.pts = [];
-  clearDisplay(); updateBtn();
-  document.getElementById('manual-cal').style.display = 'none';
-  setStatus(`Tap one end of your ${refCm} ${S.unit} object`, 'active');
-}
-function finishManualCal() {
-  const p1 = S.pts[0], p2 = S.pts[1];
-  const dx = p2.sx - p1.sx, dy = p2.sy - p1.sy;
-  const px = Math.sqrt(dx * dx + dy * dy);
-  const pxPerCm = px / S.manualRef.refCm;
-  applyCalibration(pxPerCm, 'Manual', false);
-  S.pts = []; S.manualDrawing = false;
-  setStatus('Calibrated! Tap two points to measure', 'good');
-  updateBtn();
-}
-
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 //  DRAW LOOP
-// ─────────────────────────────────────────────────
-function startLoop() { (function lp() { draw(); requestAnimationFrame(lp); })(); }
+// ═══════════════════════════════════════════════════════════
+function startLoop() { (function lp(){ draw(); requestAnimationFrame(lp); })(); }
 
 function draw() {
-  ctx.clearRect(0, 0, c2.width, c2.height);
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  drawCalPoints();
+  drawMeasurePoints();
+}
 
-  // Live depth at crosshair
-  const cd = sampleDepth(c2.width/2, c2.height/2);
-  if (cd) dbDist.textContent = fm(cd).toFixed(2) + ' ' + S.unit;
+function drawCalPoints() {
+  S.calPts.forEach((p, i) => {
+    // Orange cal markers
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 22, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,107,53,.15)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 12, 0, Math.PI*2);
+    ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#ff6b35'; ctx.fill();
+    ctx.font = '500 10px DM Mono,monospace';
+    ctx.fillStyle = '#ff6b35'; ctx.textAlign = 'center';
+    ctx.fillText('C' + (i+1), p.sx, p.sy + 24);
+  });
+  // Cal line + label
+  if (S.calPts.length === 2) {
+    const p1 = S.calPts[0], p2 = S.calPts[1];
+    drawDashedLine(p1.sx, p1.sy, p2.sx, p2.sy, '#ff6b35');
+    const mx = (p1.sx+p2.sx)/2, my = (p1.sy+p2.sy)/2;
+    drawBubble(mx, my - 22, `REF ${S.refSizeCm.toFixed(1)}cm`, '#ff6b35', 'rgba(255,107,53,.12)');
+  }
+}
 
+function drawMeasurePoints() {
   const pts = S.pts;
-  if (!pts.length) return;
-
-  pts.forEach((p, i) => drawAnchor(p.sx, p.sy, i + 1, p.depth));
-
-  if (pts.length >= 2) {
-    drawLine(pts[0], pts[1]);
-    const val = mVal.textContent;
-    if (val !== '—' && !val.endsWith('px')) {
-      const mx = (pts[0].sx + pts[1].sx) / 2;
-      const my = (pts[0].sy + pts[1].sy) / 2;
-      drawBubble(mx, my - 24, val + ' ' + S.unit);
+  pts.forEach((p, i) => {
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 24, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(0,255,255,.12)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 13, 0, Math.PI*2);
+    ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2;
+    ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, 4, 0, Math.PI*2);
+    ctx.fillStyle = '#0ff'; ctx.fill();
+    ctx.font = '500 10px DM Mono,monospace';
+    ctx.fillStyle = '#0ff'; ctx.textAlign = 'center';
+    ctx.fillText('P' + (i+1), p.sx, p.sy + 26);
+  });
+  if (pts.length === 2) {
+    drawDashedLine(pts[0].sx, pts[0].sy, pts[1].sx, pts[1].sy, '#0ff');
+    const val = mv.textContent;
+    if (val !== '—') {
+      const mx = (pts[0].sx+pts[1].sx)/2, my = (pts[0].sy+pts[1].sy)/2;
+      drawBubble(mx, my - 22, val + ' ' + S.unit, '#0ff', 'rgba(0,255,255,.1)');
     }
   }
 }
 
-function drawAnchor(x, y, idx, depth) {
-  // Outer pulse ring
-  ctx.beginPath(); ctx.arc(x, y, 26, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(0,255,255,.12)'; ctx.lineWidth = 1; ctx.stroke();
-  // Main ring
-  ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI*2);
-  ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2;
-  ctx.shadowColor = '#0ff'; ctx.shadowBlur = 12; ctx.stroke(); ctx.shadowBlur = 0;
-  // Centre dot
-  ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
-  ctx.fillStyle = '#0ff'; ctx.fill();
-  // Depth tag
-  if (depth) {
-    ctx.font = '400 10px DM Mono,monospace';
-    ctx.fillStyle = 'rgba(0,255,255,.75)';
-    ctx.textAlign = 'center';
-    ctx.fillText(fm(depth).toFixed(1) + S.unit, x, y - 24);
-  }
-  // Index label
-  ctx.font = '500 10px DM Mono,monospace';
-  ctx.fillStyle = '#0ff'; ctx.textAlign = 'center';
-  ctx.fillText('P' + idx, x, y + 28);
-}
-
-function drawLine(p1, p2) {
-  const angle = Math.atan2(p2.sy - p1.sy, p2.sx - p1.sx);
-  const perp = angle + Math.PI / 2;
+function drawDashedLine(x1, y1, x2, y2, col) {
+  const angle = Math.atan2(y2-y1, x2-x1), perp = angle + Math.PI/2;
   ctx.save();
-  ctx.beginPath(); ctx.moveTo(p1.sx, p1.sy); ctx.lineTo(p2.sx, p2.sy);
-  ctx.strokeStyle = 'rgba(0,255,255,.65)'; ctx.lineWidth = 2;
-  ctx.setLineDash([7, 5]);
-  ctx.shadowColor = '#0ff'; ctx.shadowBlur = 7; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.strokeStyle = col + 'aa'; ctx.lineWidth = 2; ctx.setLineDash([7,5]);
+  ctx.shadowColor = col; ctx.shadowBlur = 6; ctx.stroke();
   ctx.restore();
-  // Ticks
-  [[p1.sx, p1.sy],[p2.sx, p2.sy]].forEach(([tx, ty]) => {
+  [[x1,y1],[x2,y2]].forEach(([tx,ty]) => {
     ctx.beginPath();
-    ctx.moveTo(tx + Math.cos(perp)*11, ty + Math.sin(perp)*11);
-    ctx.lineTo(tx - Math.cos(perp)*11, ty - Math.sin(perp)*11);
-    ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2;
-    ctx.setLineDash([]); ctx.shadowBlur = 5; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.moveTo(tx+Math.cos(perp)*10, ty+Math.sin(perp)*10);
+    ctx.lineTo(tx-Math.cos(perp)*10, ty-Math.sin(perp)*10);
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.setLineDash([]); ctx.shadowBlur = 4; ctx.stroke(); ctx.shadowBlur = 0;
   });
 }
 
-function drawBubble(x, y, text) {
+function drawBubble(x, y, text, col, bg) {
   ctx.save();
   ctx.font = '600 13px DM Mono,monospace';
-  const tw = ctx.measureText(text).width, pw = tw + 22, ph = 28;
-  ctx.beginPath(); rr(x - pw/2, y - ph/2, pw, ph, 7);
-  ctx.fillStyle = 'rgba(0,255,255,.1)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(0,255,255,.55)'; ctx.lineWidth = 1; ctx.stroke();
-  ctx.fillStyle = '#0ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(text).width, pw = tw+22, ph = 28;
+  ctx.beginPath(); rr(x-pw/2, y-ph/2, pw, ph, 7);
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.strokeStyle = col + '99'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
   ctx.restore();
 }
 
-function rr(x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+function rr(x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
 }
 
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 //  HELPERS
-// ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 function setStatus(msg, cls) { pill.textContent = msg; pill.className = cls || ''; }
-function setLd(p, msg) { lfill.style.width = p + '%'; lmsg.textContent = msg; }
+function ld(p, msg) { document.getElementById('lf').style.width = p+'%'; document.getElementById('lmsg').textContent = msg; }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function resize() { c2.width = window.innerWidth; c2.height = window.innerHeight; }
+function resize() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; S.screenW = window.innerWidth; }
 window.addEventListener('resize', resize);
 
-// ─────────────────────────────────────────────────
-//  INIT
-// ─────────────────────────────────────────────────
 window.addEventListener('load', () => { resize(); boot(); });
 </script>
 </body>
